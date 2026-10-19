@@ -1,6 +1,6 @@
 import {
   formatDuration, formatSigned, fromMinutes, plannedFor,
-  GRADE_LABELS, GRADE_LIMITS,
+  GRADE_LABELS, GRADE_LIMITS, FORM_WINDOW,
 } from '../model.js';
 import { esc } from './common.js';
 import { renderBarcode } from './barcode.js';
@@ -48,34 +48,76 @@ function streaksCard(state) {
     </div>`).join('')}</div>`;
 }
 
-function levelCard(state) {
-  const lvl = state.level;
-  const sub = lvl.next
-    ? `${state.totalXp} XP · до «${lvl.next.title}» ещё ${lvl.toNext} XP`
-    : `${state.totalXp} XP · максимальный уровень`;
+function formCard(state) {
+  const f = state.form;
+
+  if (!f.enough) {
+    const word = f.needed === 1 ? 'ночь' : (f.needed < 5 ? 'ночи' : 'ночей');
+    return `
+      <section class="card">
+        <h2 class="card-title">Форма</h2>
+        <div class="small muted">
+          Осталось записать ещё ${f.needed} ${word} — тогда покажу,
+          как режим держится за последнюю неделю.
+        </div>
+      </section>`;
+  }
+
+  let trendLine = '<span class="muted">Сравню с прошлой неделей, когда наберётся история.</span>';
+  if (f.trend) {
+    if (f.trend.direction === 'flat') {
+      trendLine = '<span class="muted">Без заметных изменений к прошлой неделе.</span>';
+    } else {
+      const better = f.trend.direction === 'better';
+      const amount = Math.abs(f.trend.delta);
+      trendLine = `<span class="trend trend-${better ? 'better' : 'worse'}">
+        ${better ? '↓' : '↑'} на ${amount} ${amount % 10 === 1 && amount % 100 !== 11 ? 'очко' : 'очков'}
+        ${better ? 'лучше' : 'хуже'}, чем неделю назад</span>`;
+    }
+  }
+
   return `
     <section class="card">
-      <div class="level-head">
-        <div class="level-icon">${lvl.icon}</div>
-        <div class="level-meta">
-          <div class="level-name">Lvl ${lvl.level} — ${esc(lvl.title)}</div>
-          <div class="level-sub">${esc(sub)}</div>
+      <h2 class="card-title">Форма за неделю</h2>
+      <div class="form-head">
+        <div>
+          <div class="form-value tone-${f.band.tone}">${Math.round(f.avgPenalty)}</div>
+          <div class="form-caption">штрафных очков за ночь в среднем</div>
         </div>
+        <span class="grade grade-${f.band.tone}">${esc(f.band.title)}</span>
       </div>
-      <div class="xpbar"><div style="width:${(lvl.progress * 100).toFixed(1)}%"></div></div>
+      <div class="form-trend">${trendLine}</div>
     </section>`;
 }
 
-function achievementsCard(state) {
-  const unlocked = state.achievements.filter((a) => a.unlocked).length;
+function milestonesCard(state) {
+  const done = state.milestones.filter((m) => m.done).length;
+
+  // Незакрытые наверх, ближайшая к цели первой: это то, на что можно
+  // повлиять сегодня. Пройденные уходят вниз, им внимание уже не нужно.
+  const ordered = [...state.milestones].sort((a, b) => {
+    if (a.done !== b.done) return a.done ? 1 : -1;
+    return b.progress - a.progress;
+  });
+
   return `
     <section class="card">
-      <h2 class="card-title">Достижения · ${unlocked} из ${state.achievements.length}</h2>
-      <div class="ach-grid">${state.achievements.map((a) => `
-        <div class="ach ${a.unlocked ? 'unlocked' : 'locked'}" title="${esc(a.desc)}">
-          <div class="ach-icon">${a.unlocked ? a.icon : '🔒'}</div>
-          <div class="ach-title">${esc(a.title)}</div>
-        </div>`).join('')}</div>
+      <h2 class="card-title">Вехи · ${done} из ${state.milestones.length}</h2>
+      <div class="milestones">${ordered.map((m) => {
+        if (m.done) {
+          return `<div class="milestone done">
+            <span class="milestone-check">✓</span>
+            <span class="milestone-title">${esc(m.title)}</span>
+          </div>`;
+        }
+        return `<div class="milestone">
+          <div class="milestone-row">
+            <span class="milestone-title">${esc(m.title)}</span>
+            <span class="milestone-count">${m.current} / ${m.target}</span>
+          </div>
+          <div class="milestone-bar"><div style="width:${(m.progress * 100).toFixed(1)}%"></div></div>
+        </div>`;
+      }).join('')}</div>
     </section>`;
 }
 
@@ -190,9 +232,9 @@ export function renderDashboard(state, flags) {
       ${lastNightCard(state)}
       ${balanceCard(state)}
       ${streaksCard(state)}
-      ${levelCard(state)}
+      ${formCard(state)}
       ${!empty ? renderBarcode(state, 14) : ''}
-      ${achievementsCard(state)}
+      ${milestonesCard(state)}
       ${targetCard(state)}
       ${empty ? scaleCard() : ''}
     </div>`;

@@ -344,32 +344,64 @@ function stdev(values) {
 /** Сколько ночей нужно, чтобы «привычная середина сна» вообще что-то значила */
 const BASELINE_MIN_NIGHTS = 5;
 
-// ---------- Уровни ----------
-// Временная шкала: вся геймификация ещё будет переделана.
-// Очки за ночь выводятся из её уровня, а не из отдельных правил.
+// ---------- Форма ----------
 
-export const GRADE_XP = { green: 100, yellow: 40, red: 10, black: 0 };
+/**
+ * «Форма» вместо уровней.
+ *
+ * Уровни на накопительных очках показывали посещаемость, а не сон:
+ * три месяца плохого режима всё равно оставляли высокий уровень,
+ * потому что очки только прибавлялись. Форма — это среднее число
+ * штрафных очков за ночь в скользящем окне: она растёт и падает
+ * вместе с реальным положением дел и не накручивается тем,
+ * что ты просто открываешь приложение.
+ */
 
-export const LEVELS = [
-  { level: 1, from: 0, title: 'Сонный Зомби', icon: '🧟' },
-  { level: 2, from: 300, title: 'Дневной Дрыщ', icon: '😪' },
-  { level: 3, from: 1200, title: 'Осознанный Студент', icon: '🧑‍🎓' },
-  { level: 4, from: 3000, title: 'Мастер Циркадных Ритмов', icon: '🌗' },
-  { level: 5, from: 6000, title: 'Повелитель Снов', icon: '🌌' },
-  { level: 6, from: 12000, title: 'Легенда Режима', icon: '🏆' },
+export const FORM_WINDOW = 7;
+export const FORM_MIN_NIGHTS = 4;
+
+export const FORM_BANDS = [
+  { upTo: 60, title: 'Режим держится', tone: 'green' },
+  { upTo: 150, title: 'Режим съезжает', tone: 'yellow' },
+  { upTo: Infinity, title: 'Режим сбит', tone: 'red' },
 ];
 
-export function levelInfo(xp) {
-  let index = 0;
-  for (let i = 0; i < LEVELS.length; i++) if (xp >= LEVELS[i].from) index = i;
-  const current = LEVELS[index];
-  const next = LEVELS[index + 1] || null;
-  const span = next ? next.from - current.from : 1;
-  return {
-    ...current, next,
-    progress: next ? Math.min(1, (xp - current.from) / span) : 1,
-    toNext: next ? Math.max(0, next.from - xp) : 0,
-  };
+function averagePenalty(days) {
+  if (!days.length) return null;
+  return days.reduce((sum, d) => sum + d.totalPenalty, 0) / days.length;
+}
+
+/**
+ * Окно — неделя, а не две: за две недели хорошая неделя после плохой
+ * всё равно показывала бы «режим сбит», хотя сейчас всё уже в порядке.
+ * Тренд сравнивает эту неделю с предыдущей.
+ */
+export function computeForm(days) {
+  const window = days.slice(-FORM_WINDOW);
+  if (window.length < FORM_MIN_NIGHTS) {
+    return {
+      nights: window.length,
+      enough: false,
+      needed: FORM_MIN_NIGHTS - window.length,
+      avgPenalty: null, band: null, trend: null,
+    };
+  }
+
+  const avgPenalty = averagePenalty(window);
+  const band = FORM_BANDS.find((b) => avgPenalty <= b.upTo);
+
+  const recent = days.slice(-7);
+  const previous = days.slice(-14, -7);
+  let trend = null;
+  if (recent.length >= 3 && previous.length >= 3) {
+    const delta = averagePenalty(recent) - averagePenalty(previous);
+    trend = {
+      delta: Math.round(delta),
+      direction: Math.abs(delta) < 5 ? 'flat' : (delta < 0 ? 'better' : 'worse'),
+    };
+  }
+
+  return { nights: window.length, enough: true, avgPenalty, band, trend };
 }
 
 // ---------- Свод по всей истории ----------
@@ -393,13 +425,9 @@ export function computeState(data, today = todayISO()) {
     const baseline = midpointHistory.length >= BASELINE_MIN_NIGHTS
       ? median(midpointHistory.slice(-14))
       : null;
-    const day = scoreEntry(entry, settings, { midpointBaseline: baseline });
-    day.xp = GRADE_XP[day.grade];
-    days.push(day);
-    midpointHistory.push(day.midpointAbs);
+    days.push(scoreEntry(entry, settings, { midpointBaseline: baseline }));
+    midpointHistory.push(days[days.length - 1].midpointAbs);
   }
-
-  const totalXp = days.reduce((sum, d) => sum + d.xp, 0);
 
   const countFromEnd = (predicate) => {
     let n = 0;
@@ -409,19 +437,25 @@ export function computeState(data, today = todayISO()) {
     }
     return n;
   };
-  const cleanStreak = countFromEnd((d) => d.grade === 'green');
-  const phoneStreak = countFromEnd((d) => d.entry.hygiene && d.entry.hygiene.noPhone);
+  const isClean = (d) => d.grade === 'green';
+  const noBlack = (d) => d.grade !== 'black';
+  const noPhone = (d) => Boolean(d.entry.hygiene && d.entry.hygiene.noPhone);
 
-  let best = 0;
-  let run = 0;
-  let bestPhone = 0;
-  let phoneRun = 0;
-  for (const day of days) {
-    run = day.grade === 'green' ? run + 1 : 0;
-    best = Math.max(best, run);
-    phoneRun = day.entry.hygiene && day.entry.hygiene.noPhone ? phoneRun + 1 : 0;
-    bestPhone = Math.max(bestPhone, phoneRun);
-  }
+  const cleanStreak = countFromEnd(isClean);
+  const phoneStreak = countFromEnd(noPhone);
+  const noBlackStreak = countFromEnd(noBlack);
+
+  // Лучший результат запоминается навсегда: сорванный стрик не должен
+  // отбирать уже пройденную веху.
+  const bestOf = (predicate) => {
+    let best = 0;
+    let run = 0;
+    for (const day of days) {
+      run = predicate(day) ? run + 1 : 0;
+      best = Math.max(best, run);
+    }
+    return best;
+  };
 
   const byDate = {};
   for (const day of days) byDate[day.entry.date] = day;
@@ -429,16 +463,20 @@ export function computeState(data, today = todayISO()) {
   const balance = sleepBalance(days, today, 7);
   const stats = weekStats(days, today);
 
+  const summary = {
+    days, balance, stats,
+    cleanStreak, phoneStreak, noBlackStreak,
+    bestCleanStreak: bestOf(isClean),
+    bestPhoneStreak: bestOf(noPhone),
+    bestNoBlackStreak: bestOf(noBlack),
+    hasPerfectNight: days.some((d) => d.totalPenalty === 0),
+  };
+
   return {
-    settings, today, days, byDate, totalXp,
-    level: levelInfo(totalXp),
-    cleanStreak, phoneStreak,
-    bestCleanStreak: best, bestPhoneStreak: bestPhone,
-    balance, stats,
-    achievements: evaluateAchievements({
-      days, totalXp, balance, stats,
-      bestCleanStreak: best, bestPhoneStreak: bestPhone,
-    }),
+    settings, today, days, byDate,
+    ...summary,
+    form: computeForm(days),
+    milestones: evaluateMilestones(summary),
   };
 }
 
@@ -486,38 +524,56 @@ export function weekStats(days, today) {
   };
 }
 
-// ---------- Достижения ----------
+// ---------- Вехи ----------
 
-export const ACHIEVEMENTS = [
-  { id: 'first', icon: '🌙', title: 'Первая ночь', desc: 'Записал первый сон',
-    test: (s) => s.days.length >= 1 },
-  { id: 'week', icon: '📅', title: 'Неделя наблюдений', desc: '7 записанных ночей',
-    test: (s) => s.days.length >= 7 },
-  { id: 'month', icon: '🗓️', title: 'Месяц наблюдений', desc: '30 записанных ночей',
-    test: (s) => s.days.length >= 30 },
-  { id: 'clean3', icon: '🔥', title: 'Три чистых ночи', desc: '3 зелёные ночи подряд',
-    test: (s) => s.bestCleanStreak >= 3 },
-  { id: 'clean7', icon: '🔥', title: 'Чистая неделя', desc: '7 зелёных ночей подряд',
-    test: (s) => s.bestCleanStreak >= 7 },
-  { id: 'phone5', icon: '📱', title: 'Телефон в стороне', desc: '5 ночей подряд без телефона перед сном',
-    test: (s) => s.bestPhoneStreak >= 5 },
-  { id: 'zero', icon: '💎', title: 'Ноль штрафов', desc: 'Ночь без единого штрафного очка',
-    test: (s) => s.days.some((d) => d.totalPenalty === 0) },
-  { id: 'nodebt', icon: '⚖️', title: 'Долгов нет', desc: 'Баланс сна за неделю вышел в плюс',
-    test: (s) => s.balance.nights >= 5 && s.balance.balanceMinutes >= 0 },
-  { id: 'steady', icon: '🎯', title: 'Стабильность', desc: 'Разброс отбоя меньше 45 минут за 7 ночей',
-    test: (s) => s.stats.nights >= 7 && s.stats.bedSpread !== null && s.stats.bedSpread < 45 },
-  { id: 'no6h', icon: '💪', title: 'Без провалов', desc: '14 ночей подряд, ни одной короче 6 часов',
-    test: (s) => s.days.length >= 14 && s.days.slice(-14).every((d) => d.sleepMinutes >= 360) },
-  { id: 'noblack', icon: '🛡️', title: 'Без срывов', desc: '21 ночь подряд без чёрных ночей',
-    test: (s) => s.days.length >= 21 && s.days.slice(-21).every((d) => d.grade !== 'black') },
+/**
+ * Вехи вместо достижений с замочками.
+ *
+ * У каждой есть текущий прогресс и лучший достигнутый результат.
+ * Засчитывается по лучшему — сорванный стрик не отбирает пройденное,
+ * а прогресс показывает, сколько осталось до следующей. Полоска
+ * «4 из 7» тянет вперёд, серый замочек не тянет никуда.
+ */
+export const MILESTONES = [
+  { id: 'first', title: 'Первая записанная ночь', target: 1,
+    current: (s) => s.days.length, best: (s) => s.days.length },
+
+  { id: 'perfect', title: 'Ночь без единого штрафного очка', target: 1,
+    current: (s) => (s.hasPerfectNight ? 1 : 0), best: (s) => (s.hasPerfectNight ? 1 : 0) },
+
+  { id: 'clean5', title: 'Пять чистых ночей подряд', unit: 'ночей', target: 5,
+    current: (s) => s.cleanStreak, best: (s) => s.bestCleanStreak },
+
+  { id: 'noblack7', title: 'Неделя без срывов', unit: 'ночей', target: 7,
+    current: (s) => s.noBlackStreak, best: (s) => s.bestNoBlackStreak },
+
+  { id: 'phone7', title: 'Неделя без телефона перед сном', unit: 'ночей', target: 7,
+    current: (s) => s.phoneStreak, best: (s) => s.bestPhoneStreak },
+
+  { id: 'clean10', title: 'Десять чистых ночей подряд', unit: 'ночей', target: 10,
+    current: (s) => s.cleanStreak, best: (s) => s.bestCleanStreak },
+
+  { id: 'noblack14', title: 'Две недели без срывов', unit: 'ночей', target: 14,
+    current: (s) => s.noBlackStreak, best: (s) => s.bestNoBlackStreak },
+
+  { id: 'nights30', title: 'Месяц наблюдений', unit: 'ночей', target: 30,
+    current: (s) => s.days.length, best: (s) => s.days.length },
 ];
 
-export function evaluateAchievements(summary) {
-  return ACHIEVEMENTS.map((a) => {
-    let unlocked = false;
-    try { unlocked = Boolean(a.test(summary)); } catch { unlocked = false; }
-    return { ...a, unlocked };
+export function evaluateMilestones(summary) {
+  const safe = (fn) => {
+    try { return Math.max(0, Number(fn(summary)) || 0); } catch { return 0; }
+  };
+
+  return MILESTONES.map((m) => {
+    const best = safe(m.best);
+    const current = Math.min(safe(m.current), m.target);
+    const done = best >= m.target;
+    return {
+      ...m, current, best, done,
+      progress: done ? 1 : Math.min(1, current / m.target),
+      remaining: Math.max(0, m.target - current),
+    };
   });
 }
 

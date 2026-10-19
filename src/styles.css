@@ -189,54 +189,64 @@ button { cursor: pointer; border: none; background: none; }
 .streak-num.zero { color: var(--text-faint); }
 .streak-label { font-size: 11.5px; color: var(--text-faint); margin-top: 3px; line-height: 1.3; }
 
-/* ---------- Уровень и XP ---------- */
+/* ---------- Форма ---------- */
 
-.level-head { display: flex; align-items: center; gap: 12px; }
-.level-icon {
-  width: 46px; height: 46px; flex: none;
-  display: grid; place-items: center;
-  font-size: 23px;
-  border-radius: 13px;
-  background: var(--accent-wash);
-  border: 1px solid rgba(124, 140, 248, 0.22);
+.form-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+
+.form-value {
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: -1.2px;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
 }
-.level-meta { min-width: 0; }
-.level-name { font-size: 16.5px; font-weight: 650; letter-spacing: -0.2px; }
-.level-sub { font-size: 12.5px; color: var(--text-faint); }
+.form-value.tone-green { color: var(--green); }
+.form-value.tone-yellow { color: var(--yellow); }
+.form-value.tone-red { color: var(--red); }
 
-.xpbar {
-  margin-top: 13px;
-  height: 8px;
+.form-caption {
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  max-width: 180px;
+  line-height: 1.35;
+}
+.form-trend { margin-top: 13px; font-size: 13px; }
+
+.trend { font-weight: 600; }
+.trend-better { color: var(--green); }
+.trend-worse { color: var(--red); }
+
+/* ---------- Вехи ---------- */
+
+.milestones { display: flex; flex-direction: column; gap: 13px; }
+
+.milestone-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.milestone-title { font-size: 13.5px; }
+.milestone-count {
+  flex: none;
+  font-size: 12.5px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.milestone-bar {
+  margin-top: 7px;
+  height: 5px;
   border-radius: 99px;
   background: var(--surface-2);
   overflow: hidden;
 }
-.xpbar > div {
+.milestone-bar > div {
   height: 100%;
   border-radius: 99px;
   background: linear-gradient(90deg, var(--accent-dim), var(--accent));
   transition: width 0.4s ease;
 }
 
-/* ---------- Достижения ---------- */
-
-.ach-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
-  gap: 10px;
-}
-
-.ach {
-  background: var(--surface-2);
-  border: 1px solid var(--border-soft);
-  border-radius: 12px;
-  padding: 11px 9px;
-  text-align: center;
-}
-.ach.locked { opacity: 0.38; filter: saturate(0.2); }
-.ach.unlocked { border-color: rgba(124, 140, 248, 0.3); background: var(--accent-wash); }
-.ach-icon { font-size: 21px; line-height: 1.2; }
-.ach-title { font-size: 11.5px; font-weight: 600; margin-top: 3px; line-height: 1.25; }
+.milestone.done { display: flex; align-items: baseline; gap: 9px; }
+.milestone.done .milestone-title { color: var(--text-faint); }
+.milestone-check { color: var(--green); font-size: 13px; flex: none; }
 
 /* ---------- Штрих-код сна ---------- */
 
