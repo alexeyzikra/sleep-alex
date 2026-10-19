@@ -1,0 +1,15 @@
+{
+  "name": "sleep-master",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "node scripts/make-icons.mjs && vite build",
+    "preview": "vite preview",
+    "icons": "node scripts/make-icons.mjs"
+  },
+  "devDependencies": {
+    "vite": "^7.1.5"
+  }
+}
