@@ -8,6 +8,8 @@
 
 import { todayISO } from './model.js';
 
+// Ключ намеренно оставлен прежним при переименовании приложения:
+// поменяешь — и вся уже записанная история станет недоступна.
 const STORAGE_KEY = 'sleepmaster.v1';
 export const DATA_VERSION = 1;
 
@@ -154,7 +156,7 @@ export function clearAll() {
 // ---------- Экспорт / импорт ----------
 
 export function exportFileName() {
-  return `sleepmaster-${todayISO()}.json`;
+  return `sleep-${todayISO()}.json`;
 }
 
 export function exportJSON() {

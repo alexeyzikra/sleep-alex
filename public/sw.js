@@ -7,7 +7,7 @@
  * сборки хэшированные, и список пришлось бы генерировать.
  */
 
-const CACHE = 'sleepmaster-v1';
+const CACHE = 'sleep-control-v1';
 
 self.addEventListener('install', () => {
   self.skipWaiting();
