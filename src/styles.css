@@ -26,6 +26,10 @@
   --yellow-wash: rgba(214, 164, 80, 0.14);
   --red: #d3625c;
   --red-wash: rgba(211, 98, 92, 0.14);
+  /* «Чёрная» ночь — срыв. Буквально чёрный на тёмном фоне не виден,
+     поэтому уровень обозначен фиолетовым: он явно вне обычной шкалы. */
+  --black-grade: #a05cd6;
+  --black-wash: rgba(160, 92, 214, 0.16);
 
   --radius: 16px;
   --radius-sm: 10px;
@@ -505,3 +509,113 @@ input[type='range'] {
   max-width: calc(100vw - 32px);
   text-align: center;
 }
+
+/* ---------- Подъём по дням недели ---------- */
+
+.wdays { display: flex; flex-direction: column; }
+
+.wday {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+}
+
+.wday-name {
+  width: 26px;
+  flex: none;
+  font-size: 13.5px;
+  color: var(--text-dim);
+}
+
+.wday input[type='time'] { flex: 1; min-width: 0; padding: 9px 11px; min-height: 0; }
+
+.wday-reset {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  font-size: 17px;
+  line-height: 1;
+  color: var(--text-faint);
+  background: var(--surface-2);
+}
+.wday-reset:hover { color: var(--text); background: #2b3446; }
+.wday-reset[hidden] { display: none; }
+
+.wday-dur {
+  flex: none;
+  width: 82px;
+  text-align: right;
+  font-size: 13px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.wday-note {
+  font-size: 11.5px;
+  color: var(--yellow);
+  padding-left: 36px;
+  line-height: 1.3;
+}
+.wday-note:empty { display: none; }
+
+/* ---------- Уровень ночи (штрафные очки) ---------- */
+
+.grade {
+  flex: none;
+  padding: 5px 11px;
+  border-radius: 99px;
+  font-size: 13px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.grade-green { background: var(--green-wash); color: #8fd6b1; }
+.grade-yellow { background: var(--yellow-wash); color: #e8c488; }
+.grade-red { background: var(--red-wash); color: #eb9b96; }
+.grade-black { background: rgba(176, 92, 214, 0.16); color: #d2a0ea; }
+
+.grade-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border-radius: 3px;
+}
+.grade-dot.grade-green { background: var(--green); }
+.grade-dot.grade-yellow { background: var(--yellow); }
+.grade-dot.grade-red { background: var(--red); }
+.grade-dot.grade-black { background: var(--black-grade); }
+
+.scale-list { display: flex; flex-direction: column; gap: 10px; }
+.scale-row { display: flex; align-items: baseline; gap: 10px; font-size: 13px; }
+.scale-row > span:first-of-type {
+  width: 62px;
+  flex: none;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.scale-row .muted { font-size: 12.5px; line-height: 1.35; }
+
+/* Чёрный уровень в календаре, списке и штрих-коде */
+.cal-cell.black { background: var(--black-wash); border-color: rgba(160, 92, 214, 0.45); color: #d2a0ea; }
+.dayitem-dot.black { background: var(--black-grade); }
+.barcode-bar.black { background: var(--black-grade); }
+
+/* Живой подсчёт в форме чек-ина */
+.live-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.live-reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.live-reasons b { color: var(--yellow); font-weight: 650; }
+.live.live-black { background: var(--black-wash); border-color: rgba(160, 92, 214, 0.3); }
+.live.live-red { background: var(--red-wash); border-color: rgba(211, 98, 92, 0.25); }

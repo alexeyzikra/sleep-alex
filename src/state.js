@@ -14,16 +14,52 @@ const STORAGE_KEY = 'sleepmaster.v1';
 export const DATA_VERSION = 1;
 
 export const DEFAULT_SETTINGS = {
-  targetSleepHours: 8,
-  bedWindow: { start: '23:00', end: '00:00' },
-  wakeWindow: { start: '07:00', end: '08:30' },
-  bufferMinutes: 45,
+  bedTime: '23:00',
+  wakeTime: '07:30',
+  // Переопределения подъёма по дням недели, ключ — JS getDay() (вс = 0).
+  // Пусто = во все дни подъём по базовому времени.
+  weekdayWake: {},
 };
+
+/** Норма часов не хранится: она всегда выводится из отбоя и подъёма. */
+
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+function validTime(value, fallback) {
+  return TIME_RE.test(String(value)) ? String(value) : fallback;
+}
+
+/**
+ * Приводит настройки к актуальной схеме, в том числе из старой,
+ * где вместо точного времени были окна «с — по» и норма часов руками.
+ * Из окна берём его начало: это и есть время будильника.
+ */
+export function migrateSettings(raw) {
+  const incoming = raw && typeof raw === 'object' ? raw : {};
+
+  const legacyBed = incoming.bedWindow && incoming.bedWindow.start;
+  const legacyWake = incoming.wakeWindow && incoming.wakeWindow.start;
+
+  const weekdayWake = {};
+  const source = incoming.weekdayWake && typeof incoming.weekdayWake === 'object'
+    ? incoming.weekdayWake : {};
+  for (const [day, value] of Object.entries(source)) {
+    const index = Number(day);
+    if (!Number.isInteger(index) || index < 0 || index > 6) continue;
+    if (TIME_RE.test(String(value))) weekdayWake[index] = String(value);
+  }
+
+  return {
+    bedTime: validTime(incoming.bedTime || legacyBed, DEFAULT_SETTINGS.bedTime),
+    wakeTime: validTime(incoming.wakeTime || legacyWake, DEFAULT_SETTINGS.wakeTime),
+    weekdayWake,
+  };
+}
 
 function emptyData() {
   return {
     version: DATA_VERSION,
-    settings: { ...DEFAULT_SETTINGS, bedWindow: { ...DEFAULT_SETTINGS.bedWindow }, wakeWindow: { ...DEFAULT_SETTINGS.wakeWindow } },
+    settings: { ...DEFAULT_SETTINGS, weekdayWake: {} },
     entries: {},
     meta: { onboarded: false, createdAt: new Date().toISOString(), lastExportAt: null },
   };
@@ -57,11 +93,7 @@ export function normalize(raw) {
   const base = emptyData();
   if (!raw || typeof raw !== 'object') return base;
 
-  const settings = { ...base.settings, ...(raw.settings || {}) };
-  settings.bedWindow = { ...base.settings.bedWindow, ...((raw.settings || {}).bedWindow || {}) };
-  settings.wakeWindow = { ...base.settings.wakeWindow, ...((raw.settings || {}).wakeWindow || {}) };
-  settings.targetSleepHours = Number(settings.targetSleepHours) || DEFAULT_SETTINGS.targetSleepHours;
-  settings.bufferMinutes = Number(settings.bufferMinutes) || DEFAULT_SETTINGS.bufferMinutes;
+  const settings = migrateSettings(raw.settings);
 
   const entries = {};
   for (const [date, entry] of Object.entries(raw.entries || {})) {

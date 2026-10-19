@@ -1,9 +1,55 @@
 /**
- * Настройки целевого режима, бэкап и служебная информация.
+ * Настройки режима, бэкап и опасная зона.
+ *
+ * Норма часов здесь не вводится — она всегда следствие отбоя и подъёма.
+ * Иначе можно задать «ложусь в 23:00, встаю в 06:00, сплю 9 часов»,
+ * что просто неверно арифметически.
  */
 
 import { esc } from './common.js';
 import { storageAvailable, getData } from '../state.js';
+import { weeklyPlan, formatDuration, PENALTY } from '../model.js';
+
+const GRACE = PENALTY.planDriftGraceMin;
+
+function driftNote(day) {
+  if (!day.isOverride || day.driftFromAnchor <= GRACE) return '';
+  return `сдвиг ${formatDuration(day.driftFromAnchor)} от обычного — штраф каждую такую ночь`;
+}
+
+function weekRows(settings) {
+  return weeklyPlan(settings).map((day) => `
+    <div class="wday" data-row="${day.index}">
+      <span class="wday-name">${day.short}</span>
+      <input type="time" data-weekday="${day.index}" value="${esc(day.wakeTime)}"
+             aria-label="Подъём, ${esc(day.full.toLowerCase())}">
+      <button class="wday-reset" data-action="reset-weekday" data-weekday="${day.index}"
+              title="Вернуть базовое время"
+              ${day.isOverride ? '' : 'hidden'}>×</button>
+      <span class="wday-dur" data-dur="${day.index}">${esc(formatDuration(day.durationMinutes))}</span>
+    </div>
+    <div class="wday-note" data-drift="${day.index}">${esc(driftNote(day))}</div>`).join('');
+}
+
+/**
+ * Обновляет только вычисляемые части (нормы, предупреждения), не трогая
+ * сами поля ввода — иначе при правке времени улетает фокус.
+ */
+export function refreshSettingsComputed(root, settings) {
+  for (const day of weeklyPlan(settings)) {
+    const duration = root.querySelector(`[data-dur="${day.index}"]`);
+    if (duration) duration.textContent = formatDuration(day.durationMinutes);
+
+    const note = root.querySelector(`[data-drift="${day.index}"]`);
+    if (note) note.textContent = driftNote(day);
+
+    const reset = root.querySelector(`[data-action="reset-weekday"][data-weekday="${day.index}"]`);
+    if (reset) reset.hidden = !day.isOverride;
+
+    const input = root.querySelector(`input[data-weekday="${day.index}"]`);
+    if (input && document.activeElement !== input) input.value = day.wakeTime;
+  }
+}
 
 export function renderSettings(state) {
   const s = state.settings;
@@ -13,53 +59,40 @@ export function renderSettings(state) {
   return `
     <div class="view">
       <section class="card">
-        <h2 class="card-title">Целевой режим</h2>
+        <h2 class="card-title">Базовый режим</h2>
 
-        <div class="field">
-          <label class="field-label" for="s-norm">Норма сна, часов</label>
-          <input type="number" id="s-norm" data-setting="targetSleepHours"
-                 min="4" max="12" step="0.25" value="${s.targetSleepHours}">
-          <div class="field-hint">Студентам обычно нужно 7–9 часов.</div>
-        </div>
-
-        <div class="field">
-          <label class="field-label">Окно отхода ко сну</label>
-          <div class="time-pair">
-            <input type="time" data-window="bedWindow.start" value="${esc(s.bedWindow.start)}">
-            <span>—</span>
-            <input type="time" data-window="bedWindow.end" value="${esc(s.bedWindow.end)}">
+        <div class="row">
+          <div class="field">
+            <label class="field-label" for="s-bed">Ложусь</label>
+            <input type="time" id="s-bed" data-time="bedTime" value="${esc(s.bedTime)}">
           </div>
-          <div class="field-hint">Окно может проходить через полночь, это нормально.</div>
-        </div>
-
-        <div class="field">
-          <label class="field-label">Окно подъёма</label>
-          <div class="time-pair">
-            <input type="time" data-window="wakeWindow.start" value="${esc(s.wakeWindow.start)}">
-            <span>—</span>
-            <input type="time" data-window="wakeWindow.end" value="${esc(s.wakeWindow.end)}">
+          <div class="field">
+            <label class="field-label" for="s-wake">Встаю</label>
+            <input type="time" id="s-wake" data-time="wakeTime" value="${esc(s.wakeTime)}">
           </div>
         </div>
 
-        <div class="field" style="margin-bottom:0">
-          <label class="field-label" for="s-buffer">Допустимое отклонение</label>
-          <select id="s-buffer" data-setting="bufferMinutes">
-            ${[15, 30, 45, 60].map((m) => `
-              <option value="${m}" ${s.bufferMinutes === m ? 'selected' : ''}>± ${m} минут</option>`).join('')}
-          </select>
-          <div class="field-hint">
-            Попал в окно — день зелёный. Промахнулся, но в пределах отклонения — жёлтый.
-            Этим же допуском считается «сон близко к норме».
-          </div>
+        <div class="field-hint" style="margin-top:-6px">
+          Это якорь ритма. Норма сна считается сама — задавать её руками
+          нельзя, иначе она разойдётся со временем отбоя и подъёма.
+        </div>
+      </section>
+
+      <section class="card">
+        <h2 class="card-title">Подъём по дням недели</h2>
+        <div class="wdays">${weekRows(s)}</div>
+        <div class="field-hint" style="margin-top:12px">
+          Будильник в разные дни разный — это нормально, пока разброс
+          в пределах часа. Дальше начинается смещение ритма, и такой день
+          будет штрафоваться сам по себе, даже если встать ровно по плану.
         </div>
       </section>
 
       <section class="card">
         <h2 class="card-title">Бэкап и перенос</h2>
         <p class="small muted" style="margin:0 0 13px">
-          История хранится только в этом браузере. Экспорт — единственный способ
-          перенести её на другое устройство или не потерять при чистке данных.
-          Импорт сливает записи по дате, так что телефон и ноутбук можно сводить вместе.
+          История хранится только в этом браузере. Импорт сливает записи
+          по дате, так что телефон и ноутбук можно сводить вместе.
         </p>
         <button class="btn" data-action="export">⬇️ Скачать JSON${entryCount ? ` (${entryCount} ночей)` : ''}</button>
         <button class="btn mt" data-action="import">⬆️ Загрузить JSON</button>
@@ -68,29 +101,6 @@ export function renderSettings(state) {
           ${lastExport
             ? 'Последний бэкап: ' + esc(new Date(lastExport).toLocaleDateString('ru-RU'))
             : 'Бэкапов пока не было.'}
-        </div>
-      </section>
-
-      <section class="card">
-        <h2 class="card-title">Как это работает</h2>
-        <div class="small muted" style="line-height:1.55">
-          <p style="margin:0 0 10px">
-            <strong style="color:var(--text-dim)">Добавь на домашний экран.</strong>
-            Это не про красивую иконку: у обычных сайтов iOS подчищает сохранённые
-            данные, если не заходить неделю, а у установленного приложения — нет.
-          </p>
-          <p style="margin:0 0 10px">
-            <strong style="color:var(--text-dim)">Будильник ставь системный.</strong>
-            Браузер не может разбудить при закрытой вкладке — такого API просто нет.
-            Поставь один повторяющийся будильник в часах телефона и не трогай его:
-            стабильное время подъёма и так важнее стабильного отбоя.
-          </p>
-          <p style="margin:0">
-            <strong style="color:var(--text-dim)">XP пересчитывается из истории.</strong>
-            Очки не хранятся отдельно, поэтому не могут разойтись с записями.
-            Обратная сторона: если поменять целевые окна, прошлые ночи пересчитаются
-            по новым правилам.
-          </p>
         </div>
       </section>
 

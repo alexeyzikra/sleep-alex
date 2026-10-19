@@ -1,8 +1,13 @@
 import {
-  formatDuration, formatSigned, formatDateHuman, fromMinutes,
+  formatDuration, formatSigned, fromMinutes, plannedFor,
+  GRADE_LABELS, GRADE_LIMITS,
 } from '../model.js';
 import { esc } from './common.js';
 import { renderBarcode } from './barcode.js';
+
+function gradeBadge(grade, penalty) {
+  return `<span class="grade grade-${grade}">${penalty} ${penalty === 1 ? 'очко' : (penalty % 10 >= 2 && penalty % 10 <= 4 && (penalty < 10 || penalty > 20) ? 'очка' : 'очков')}</span>`;
+}
 
 function balanceCard(state) {
   const { balanceMinutes, nights, windowDays } = state.balance;
@@ -10,9 +15,7 @@ function balanceCard(state) {
     return `
       <section class="card">
         <h2 class="card-title">Баланс сна</h2>
-        <div class="empty" style="padding:8px 0">
-          Пока нет записей за последние ${windowDays} дней.
-        </div>
+        <div class="empty" style="padding:8px 0">Пока нет записей за последние ${windowDays} дней.</div>
       </section>`;
   }
 
@@ -20,10 +23,9 @@ function balanceCard(state) {
   if (balanceMinutes < -180) tone = 'bad';
   else if (balanceMinutes < -45) tone = 'warn';
 
-  const norm = state.settings.targetSleepHours;
   const caption = balanceMinutes >= 0
-    ? `Спал даже чуть больше нормы. Ночей учтено: ${nights}.`
-    : `Недосып относительно нормы ${norm} ч. Ночей учтено: ${nights}.`;
+    ? `Спал даже чуть больше своей нормы. Ночей учтено: ${nights}.`
+    : `Недосып относительно твоей нормы. Ночей учтено: ${nights}.`;
 
   return `
     <section class="card">
@@ -35,8 +37,8 @@ function balanceCard(state) {
 
 function streaksCard(state) {
   const items = [
-    { icon: '🔥', num: state.scheduleStreak, label: 'дней подряд<br>по графику' },
-    { icon: '📱', num: state.phoneStreak, label: 'дней подряд<br>без телефона' },
+    { icon: '✅', num: state.cleanStreak, label: 'чистых ночей<br>подряд' },
+    { icon: '📱', num: state.phoneStreak, label: 'ночей подряд<br>без телефона' },
   ];
   return `<div class="streaks">${items.map((s) => `
     <div class="streak">
@@ -80,15 +82,6 @@ function achievementsCard(state) {
 function lastNightCard(state) {
   const day = state.byDate[state.today];
   if (!day) return '';
-  const parts = [
-    `Лёг ${day.entry.bedTime}, встал ${day.entry.wakeTime}`,
-    day.phoneFreeMinutes !== null && day.phoneFreeMinutes > 0
-      ? `без телефона ${formatDuration(day.phoneFreeMinutes)}`
-      : null,
-  ].filter(Boolean);
-
-  const awards = [...day.awards];
-  if (day.bonus) awards.push({ reason: 'Бонус за стрик ×3', amount: day.bonus });
 
   return `
     <section class="card">
@@ -96,44 +89,72 @@ function lastNightCard(state) {
       <div class="stat">
         <div>
           <div style="font-size:21px;font-weight:650;letter-spacing:-0.4px">${esc(formatDuration(day.sleepMinutes))}</div>
-          <div class="small muted" style="margin-top:2px">${esc(parts.join(' · '))}</div>
+          <div class="small muted" style="margin-top:2px">
+            ${esc(`Лёг ${day.entry.bedTime}, встал ${day.entry.wakeTime}`)}
+          </div>
         </div>
-        <div class="stat-value" style="color:var(--accent)">+${day.dayXp} XP</div>
+        ${gradeBadge(day.grade, day.totalPenalty)}
       </div>
-      ${awards.length ? `<div class="divider"></div>
-        <div class="statlist">${awards.map((a) => `
+
+      ${day.blackFlags.length ? `<div class="msg error mt">
+        ${day.blackFlags.map(esc).join('<br>')}
+      </div>` : ''}
+
+      ${day.reasons.length ? `<div class="divider"></div>
+        <div class="statlist">${day.reasons.map((r) => `
           <div class="stat">
-            <span class="stat-label">${esc(a.reason)}</span>
-            <span class="stat-value" style="color:var(--green)">+${a.amount}</span>
-          </div>`).join('')}</div>` : ''}
+            <span class="stat-label">${esc(r.label)}${r.detail ? `<br><span class="small" style="color:var(--text-faint)">${esc(r.detail)}</span>` : ''}</span>
+            <span class="stat-value" style="color:var(--yellow)">+${r.points}</span>
+          </div>`).join('')}</div>`
+      : `<div class="divider"></div>
+        <div class="small" style="color:var(--green)">Ни одного штрафного очка. Идеальная ночь.</div>`}
+
       <button class="btn btn-ghost btn-sm mt" data-action="edit-day" data-date="${state.today}"
               style="width:100%">Исправить запись</button>
     </section>`;
 }
 
 function targetCard(state) {
-  const s = state.settings;
+  const plan = plannedFor(state.today, state.settings);
   const mid = state.stats.avgMidpoint;
+
   return `
     <section class="card">
-      <h2 class="card-title">Твой целевой режим</h2>
+      <h2 class="card-title">План на сегодня</h2>
       <div class="statlist">
         <div class="stat">
           <span class="stat-label">Отбой</span>
-          <span class="stat-value">${esc(s.bedWindow.start)} – ${esc(s.bedWindow.end)}</span>
+          <span class="stat-value">${esc(plan.bedTime)}</span>
         </div>
         <div class="stat">
-          <span class="stat-label">Подъём</span>
-          <span class="stat-value">${esc(s.wakeWindow.start)} – ${esc(s.wakeWindow.end)}</span>
+          <span class="stat-label">Подъём${plan.isOverride ? ' <span class="small muted">(по дню недели)</span>' : ''}</span>
+          <span class="stat-value">${esc(plan.wakeTime)}</span>
         </div>
         <div class="stat">
-          <span class="stat-label">Норма сна</span>
-          <span class="stat-value">${s.targetSleepHours} ч</span>
+          <span class="stat-label">Норма этой ночи</span>
+          <span class="stat-value">${esc(formatDuration(plan.durationMinutes))}</span>
         </div>
         ${mid !== null ? `<div class="stat">
           <span class="stat-label">Середина сна за неделю</span>
           <span class="stat-value">${esc(fromMinutes(mid))}</span>
         </div>` : ''}
+      </div>
+    </section>`;
+}
+
+function scaleCard() {
+  return `
+    <section class="card">
+      <h2 class="card-title">Шкала ночи</h2>
+      <div class="scale-list">
+        <div class="scale-row"><i class="grade-dot grade-green"></i>
+          <span>0–${GRADE_LIMITS.green}</span><span class="muted">${GRADE_LABELS.green}</span></div>
+        <div class="scale-row"><i class="grade-dot grade-yellow"></i>
+          <span>${GRADE_LIMITS.green + 1}–${GRADE_LIMITS.yellow}</span><span class="muted">${GRADE_LABELS.yellow}</span></div>
+        <div class="scale-row"><i class="grade-dot grade-red"></i>
+          <span>${GRADE_LIMITS.yellow + 1}+</span><span class="muted">${GRADE_LABELS.red}</span></div>
+        <div class="scale-row"><i class="grade-dot grade-black"></i>
+          <span>срыв</span><span class="muted">меньше 4 часов сна, подъём мимо на 3+ часа или сбитый ритм</span></div>
       </div>
     </section>`;
 }
@@ -162,7 +183,7 @@ export function renderDashboard(state, flags) {
         <div class="empty">
           <span class="empty-icon">🌘</span>
           Записывай сон каждое утро — одной кнопкой, за 15 секунд.<br>
-          Через неделю появятся первые выводы о твоём режиме.
+          Чем меньше штрафных очков за ночь, тем лучше режим.
         </div>
       </section>` : ''}
 
@@ -173,5 +194,6 @@ export function renderDashboard(state, flags) {
       ${!empty ? renderBarcode(state, 14) : ''}
       ${achievementsCard(state)}
       ${targetCard(state)}
+      ${empty ? scaleCard() : ''}
     </div>`;
 }

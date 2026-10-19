@@ -3,7 +3,7 @@
  */
 
 import {
-  validateEntry, scoreEntry, formatDuration, formatDateHuman, todayISO,
+  validateEntry, scoreEntry, formatDuration, formatDateHuman, todayISO, GRADE_LABELS,
 } from '../model.js';
 import { getData, saveEntry, deleteEntry } from '../state.js';
 import { esc, energyLabel, HYGIENE_ITEMS } from './common.js';
@@ -12,8 +12,8 @@ function blankForm(date, settings) {
   return {
     date,
     phoneOffTime: '',
-    bedTime: settings.bedWindow.start,
-    wakeTime: settings.wakeWindow.start,
+    bedTime: settings.bedTime,
+    wakeTime: settings.wakeTime,
     energy: 6,
     hygiene: { noPhone: false, noCaffeine: false, goodRoom: false },
     note: '',
@@ -32,13 +32,26 @@ function liveHTML(form, settings) {
   if (resolved.phoneFreeMinutes !== null && resolved.phoneFreeMinutes > 0) {
     bits.push(`без телефона ${formatDuration(resolved.phoneFreeMinutes)} до сна`);
   }
-  bits.push(score.onSchedule ? 'в целевом окне' : 'мимо целевого окна');
-  if (score.hitNorm) bits.push('норма выполнена');
+  bits.push(`план ${score.plan.bedTime} → ${score.plan.wakeTime}`);
+
+  // Три самых дорогих нарушения: сразу видно, что именно стоило очков
+  const top = [...score.reasons].sort((a, b) => b.points - a.points).slice(0, 3);
 
   return `
-    <div class="live">
-      <div class="live-main">${esc(formatDuration(resolved.sleepMinutes))} сна · +${score.baseXp} XP</div>
-      <div class="live-sub">${esc(bits.join(' · '))}</div>
+    <div class="live live-${score.grade}">
+      <div class="live-head">
+        <div>
+          <div class="live-main">${esc(formatDuration(resolved.sleepMinutes))} сна</div>
+          <div class="live-sub">${esc(bits.join(' · '))}</div>
+        </div>
+        <span class="grade grade-${score.grade}">${score.totalPenalty}</span>
+      </div>
+      ${top.length
+        ? `<div class="live-reasons">${top.map((r) => `<span>${esc(r.label)} <b>+${r.points}</b></span>`).join('')}</div>`
+        : '<div class="live-reasons" style="color:var(--green)">Ни одного штрафного очка</div>'}
+      ${score.blackFlags.length
+        ? `<div class="live-reasons" style="color:var(--black-grade)">${score.blackFlags.map(esc).join(' · ')}</div>`
+        : ''}
     </div>
     ${warnings.map((w) => `<div class="msg warn">${esc(w)}</div>`).join('')}`;
 }
@@ -156,7 +169,9 @@ export function checkinSheet(date, ctx) {
       saveEntry(form);
       ctx.close();
       const score = scoreEntry(form, settings);
-      ctx.toast(`Записано: ${formatDuration(score.sleepMinutes)} · +${score.baseXp} XP`);
+      ctx.toast(score.totalPenalty === 0
+        ? `Записано: ${formatDuration(score.sleepMinutes)} · идеальная ночь`
+        : `Записано: ${formatDuration(score.sleepMinutes)} · ${score.totalPenalty} штрафных`);
     });
 
     const deleteButton = root.querySelector('[data-role="delete"]');

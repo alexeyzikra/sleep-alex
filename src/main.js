@@ -4,7 +4,7 @@ import { computeState, todayISO, formatDateHuman } from './model.js';
 import * as store from './state.js';
 import { renderDashboard } from './ui/dashboard.js';
 import { renderHistory } from './ui/history.js';
-import { renderSettings } from './ui/settings.js';
+import { renderSettings, refreshSettingsComputed } from './ui/settings.js';
 import { checkinSheet } from './ui/checkin.js';
 
 const TABS = [
@@ -136,10 +136,31 @@ function importFromFile(file) {
   reader.readAsText(file);
 }
 
+/**
+ * Настройки пишем в хранилище без полного перерендера, иначе на каждом
+ * изменении времени улетает фокус из поля. Вычисляемые подписи
+ * (нормы по дням, предупреждения) обновляем точечно.
+ */
+function commitSettings(patch) {
+  suppressRender = true;
+  store.updateSettings(patch);
+  suppressRender = false;
+  if (ui.tab === 'settings') refreshSettingsComputed(app, store.getData().settings);
+}
+
+function setWeekdayWake(index, value) {
+  const weekdayWake = { ...store.getData().settings.weekdayWake };
+  if (value) weekdayWake[index] = value;
+  else delete weekdayWake[index];
+  commitSettings({ weekdayWake });
+}
+
 const ACTIONS = {
   checkin: () => openCheckin(todayISO()),
 
   'edit-day': (el) => openCheckin(el.dataset.date),
+
+  'reset-weekday': (el) => setWeekdayWake(Number(el.dataset.weekday), null),
 
   month: (el) => {
     ui.month = el.dataset.month;
@@ -190,24 +211,14 @@ app.addEventListener('change', (event) => {
     return;
   }
 
-  const commit = (patch) => {
-    suppressRender = true;
-    store.updateSettings(patch);
-    suppressRender = false;
-  };
-
-  if (el.dataset.setting) {
-    const value = Number(el.value);
-    if (!Number.isFinite(value) || value <= 0) return;
-    commit({ [el.dataset.setting]: value });
+  if (el.dataset.time) {
+    if (!el.value) return;
+    commitSettings({ [el.dataset.time]: el.value });
     return;
   }
 
-  if (el.dataset.window) {
-    if (!el.value) return;
-    const [group, edge] = el.dataset.window.split('.');
-    const current = store.getData().settings[group];
-    commit({ [group]: { ...current, [edge]: el.value } });
+  if (el.dataset.weekday !== undefined && el.tagName === 'INPUT') {
+    setWeekdayWake(Number(el.dataset.weekday), el.value || null);
   }
 });
 

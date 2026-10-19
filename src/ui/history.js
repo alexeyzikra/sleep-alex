@@ -29,7 +29,7 @@ function calendarCard(state, cursor) {
     if (iso === today) classes.push('today');
     const future = iso > today;
     const title = day
-      ? `${formatDuration(day.sleepMinutes)} · ${day.entry.bedTime} → ${day.entry.wakeTime}`
+      ? `${formatDuration(day.sleepMinutes)} · ${day.entry.bedTime} → ${day.entry.wakeTime} · ${day.totalPenalty} штрафных`
       : (future ? 'Ещё не наступило' : 'Нет записи');
     cells.push(
       `<button class="${classes.join(' ')}" ${future ? 'disabled' : ''}
@@ -52,9 +52,10 @@ function calendarCard(state, cursor) {
       <div class="cal-head">${['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'].map((d) => `<span>${d}</span>`).join('')}</div>
       <div class="cal-grid">${cells.join('')}</div>
       <div class="legend">
-        <span><i style="background:var(--green)"></i>по графику</span>
-        <span><i style="background:var(--yellow)"></i>небольшой сдвиг</span>
-        <span><i style="background:var(--red)"></i>хаос</span>
+        <span><i style="background:var(--green)"></i>чисто</span>
+        <span><i style="background:var(--yellow)"></i>есть штрафы</span>
+        <span><i style="background:var(--red)"></i>режим сбит</span>
+        <span><i style="background:var(--black-grade)"></i>срыв</span>
         <span><i style="background:var(--surface-2)"></i>нет записи</span>
       </div>
     </section>`;
@@ -69,10 +70,7 @@ function statsCard(state) {
 
   const rows = [
     { label: `Средний сон за ${s.nights} ночей`, value: formatDuration(s.avgSleep) },
-    {
-      label: 'Отклонение от нормы',
-      value: formatSigned(s.avgSleep - state.settings.targetSleepHours * 60),
-    },
+    { label: 'Среднее штрафных за ночь', value: String(Math.round(s.avgPenalty)) },
     s.bedSpread !== null
       ? { label: 'Разброс времени отбоя', value: '±' + formatDuration(s.bedSpread) }
       : null,
@@ -125,7 +123,7 @@ function dayListCard(state) {
             </span>
             <span>
               <span class="dayitem-dur">${esc(formatDuration(day.sleepMinutes))}</span>
-              <span class="dayitem-xp">+${day.dayXp} XP</span>
+              <span class="dayitem-xp">${day.totalPenalty} штрафных</span>
             </span>
           </button>`;
       }).join('')}</div>
