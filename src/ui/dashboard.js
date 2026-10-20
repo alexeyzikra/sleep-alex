@@ -169,7 +169,9 @@ function targetCard(state) {
           <span class="stat-value">${esc(plan.bedTime)}</span>
         </div>
         <div class="stat">
-          <span class="stat-label">Подъём${plan.isOverride ? ' <span class="small muted">(по дню недели)</span>' : ''}</span>
+          <span class="stat-label">Подъём${plan.alternates
+            ? ` <span class="small muted">(${plan.parity === 'even' ? 'чётная' : 'нечётная'} неделя)</span>`
+            : (plan.isWeekly ? ' <span class="small muted">(по дню недели)</span>' : '')}</span>
           <span class="stat-value">${esc(plan.wakeTime)}</span>
         </div>
         <div class="stat">

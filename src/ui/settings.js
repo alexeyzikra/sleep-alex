@@ -8,85 +8,157 @@
 
 import { esc } from './common.js';
 import { storageAvailable, getData } from '../state.js';
-import { weeklyPlan, formatDuration, PENALTY } from '../model.js';
+import {
+  weeklyPlan, plannedFor, anchorWake, formatDuration, fromMinutes,
+  isoWeek, weekParity, todayISO, PENALTY,
+} from '../model.js';
 
 const GRACE = PENALTY.planDriftGraceMin;
 
-function driftNote(day) {
-  if (!day.isOverride || day.driftFromAnchor <= GRACE) return '';
-  return `сдвиг ${formatDuration(day.driftFromAnchor)} от обычного — штраф каждую такую ночь`;
+function driftNote(variant) {
+  if (variant.driftFromAnchor <= GRACE) return '';
+  return `сдвиг ${formatDuration(variant.driftFromAnchor)} от обычного подъёма — штраф каждую такую ночь`;
 }
 
-function weekRows(settings) {
-  return weeklyPlan(settings).map((day) => `
-    <div class="wday" data-row="${day.index}">
-      <span class="wday-name">${day.short}</span>
-      <input type="time" data-weekday="${day.index}" value="${esc(day.wakeTime)}"
-             aria-label="Подъём, ${esc(day.full.toLowerCase())}">
-      <button class="wday-reset" data-action="reset-weekday" data-weekday="${day.index}"
-              title="Вернуть базовое время"
-              ${day.isOverride ? '' : 'hidden'}>×</button>
-      <span class="wday-dur" data-dur="${day.index}">${esc(formatDuration(day.durationMinutes))}</span>
-    </div>
-    <div class="wday-note" data-drift="${day.index}">${esc(driftNote(day))}</div>`).join('');
+function timePair(dayIndex, kind, variant) {
+  return `
+    <div class="dayrow">
+      <input type="time" value="${esc(variant.bedTime)}"
+             data-day="${dayIndex}" data-variant="${kind}" data-field="bedTime"
+             aria-label="Отбой">
+      <span class="dayrow-arrow">→</span>
+      <input type="time" value="${esc(variant.wakeTime)}"
+             data-day="${dayIndex}" data-variant="${kind}" data-field="wakeTime"
+             aria-label="Подъём">
+    </div>`;
+}
+
+function dayBlock(day) {
+  const altButtonTitle = day.alternates
+    ? 'Сделать одинаковым во все недели'
+    : 'Разное расписание по чётным и нечётным неделям';
+
+  const head = `
+    <div class="dayblock-head">
+      <span class="dayblock-name">${esc(day.full)}</span>
+      ${day.alternates ? '' : `<span class="dayblock-dur" data-dur="${day.index}-main">${esc(formatDuration(day.main.durationMinutes))}</span>`}
+      <button class="dayblock-alt ${day.alternates ? 'on' : ''}"
+              data-action="toggle-alt" data-weekday="${day.index}"
+              title="${altButtonTitle}" aria-label="${altButtonTitle}">⇄</button>
+    </div>`;
+
+  if (!day.alternates) {
+    return `<div class="dayblock">
+      ${head}
+      ${timePair(day.index, 'main', day.main)}
+      <div class="dayblock-note" data-drift="${day.index}-main">${esc(driftNote(day.main))}</div>
+    </div>`;
+  }
+
+  const variantGroup = (kind, label, variant) => `
+    <div class="dayvariant">
+      <div class="dayvariant-label">
+        ${label} <span data-dur="${day.index}-${kind}">${esc(formatDuration(variant.durationMinutes))}</span>
+      </div>
+      ${timePair(day.index, kind, variant)}
+      <div class="dayblock-note" data-drift="${day.index}-${kind}">${esc(driftNote(variant))}</div>
+    </div>`;
+
+  return `<div class="dayblock alternating">
+    ${head}
+    ${variantGroup('main', 'чётная неделя ·', day.main)}
+    ${variantGroup('alt', 'нечётная неделя ·', day.alt)}
+  </div>`;
 }
 
 /**
- * Обновляет только вычисляемые части (нормы, предупреждения), не трогая
- * сами поля ввода — иначе при правке времени улетает фокус.
+ * Обновляет только вычисляемые подписи, не трогая поля ввода —
+ * иначе при правке времени улетает фокус.
  */
 export function refreshSettingsComputed(root, settings) {
   for (const day of weeklyPlan(settings)) {
-    const duration = root.querySelector(`[data-dur="${day.index}"]`);
-    if (duration) duration.textContent = formatDuration(day.durationMinutes);
+    const variants = [['main', day.main], ['alt', day.alt]];
+    for (const [kind, variant] of variants) {
+      if (!variant) continue;
+      const duration = root.querySelector(`[data-dur="${day.index}-${kind}"]`);
+      if (duration) duration.textContent = formatDuration(variant.durationMinutes);
+      const note = root.querySelector(`[data-drift="${day.index}-${kind}"]`);
+      if (note) note.textContent = driftNote(variant);
+    }
+  }
 
-    const note = root.querySelector(`[data-drift="${day.index}"]`);
-    if (note) note.textContent = driftNote(day);
+  const anchor = root.querySelector('[data-anchor]');
+  if (anchor) anchor.textContent = fromMinutes(anchorWake(settings));
 
-    const reset = root.querySelector(`[data-action="reset-weekday"][data-weekday="${day.index}"]`);
-    if (reset) reset.hidden = !day.isOverride;
-
-    const input = root.querySelector(`input[data-weekday="${day.index}"]`);
-    if (input && document.activeElement !== input) input.value = day.wakeTime;
+  const simpleNorm = root.querySelector('[data-simple-norm]');
+  if (simpleNorm) {
+    const plan = plannedFor(todayISO(), settings);
+    simpleNorm.textContent = formatDuration(plan.durationMinutes);
   }
 }
 
+function scheduleCard(settings) {
+  const weekly = settings.scheduleMode === 'weekly';
+  const today = todayISO();
+
+  const modes = `
+    <div class="segmented">
+      <button class="${weekly ? '' : 'active'}" data-action="mode" data-mode="simple">Одинаково каждый день</button>
+      <button class="${weekly ? 'active' : ''}" data-action="mode" data-mode="weekly">По дням недели</button>
+    </div>`;
+
+  if (!weekly) {
+    const plan = plannedFor(today, settings);
+    return `
+      <section class="card">
+        <h2 class="card-title">Режим сна</h2>
+        ${modes}
+        <div class="row">
+          <div class="field" style="margin-bottom:0">
+            <label class="field-label" for="s-bed">Ложусь</label>
+            <input type="time" id="s-bed" data-time="bedTime" value="${esc(settings.bedTime)}">
+          </div>
+          <div class="field" style="margin-bottom:0">
+            <label class="field-label" for="s-wake">Встаю</label>
+            <input type="time" id="s-wake" data-time="wakeTime" value="${esc(settings.wakeTime)}">
+          </div>
+        </div>
+        <div class="field-hint" style="margin-top:11px">
+          Норма сна: <strong data-simple-norm>${esc(formatDuration(plan.durationMinutes))}</strong>.
+          Считается сама из отбоя и подъёма — задавать её руками нельзя,
+          иначе она разойдётся с расписанием.
+        </div>
+      </section>`;
+  }
+
+  const parity = weekParity(today) === 'even' ? 'чётная' : 'нечётная';
+
+  return `
+    <section class="card">
+      <h2 class="card-title">Режим сна</h2>
+      ${modes}
+      <div class="dayblocks">${weeklyPlan(settings).map(dayBlock).join('')}</div>
+      <div class="field-hint" style="margin-top:14px">
+        Кнопка ⇄ у дня включает разное расписание по чётным и нечётным
+        неделям — для пар, которые идут через неделю. Сейчас идёт
+        <strong>${parity} неделя</strong> (№${isoWeek(today)}).
+      </div>
+      <div class="field-hint" style="margin-top:8px">
+        Обычный подъём — <strong data-anchor>${esc(fromMinutes(anchorWake(settings)))}</strong>
+        (медиана по всей неделе). Разброс будильника в пределах часа от него
+        бесплатный, дальше начинается смещение ритма, и такой день штрафуется
+        сам по себе, даже если встать ровно по плану.
+      </div>
+    </section>`;
+}
+
 export function renderSettings(state) {
-  const s = state.settings;
   const entryCount = Object.keys(getData().entries).length;
   const lastExport = getData().meta.lastExportAt;
 
   return `
     <div class="view">
-      <section class="card">
-        <h2 class="card-title">Базовый режим</h2>
-
-        <div class="row">
-          <div class="field">
-            <label class="field-label" for="s-bed">Ложусь</label>
-            <input type="time" id="s-bed" data-time="bedTime" value="${esc(s.bedTime)}">
-          </div>
-          <div class="field">
-            <label class="field-label" for="s-wake">Встаю</label>
-            <input type="time" id="s-wake" data-time="wakeTime" value="${esc(s.wakeTime)}">
-          </div>
-        </div>
-
-        <div class="field-hint" style="margin-top:-6px">
-          Это якорь ритма. Норма сна считается сама — задавать её руками
-          нельзя, иначе она разойдётся со временем отбоя и подъёма.
-        </div>
-      </section>
-
-      <section class="card">
-        <h2 class="card-title">Подъём по дням недели</h2>
-        <div class="wdays">${weekRows(s)}</div>
-        <div class="field-hint" style="margin-top:12px">
-          Будильник в разные дни разный — это нормально, пока разброс
-          в пределах часа. Дальше начинается смещение ритма, и такой день
-          будет штрафоваться сам по себе, даже если встать ровно по плану.
-        </div>
-      </section>
+      ${scheduleCard(state.settings)}
 
       <section class="card">
         <h2 class="card-title">Бэкап и перенос</h2>

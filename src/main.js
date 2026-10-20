@@ -2,6 +2,7 @@ import './styles.css';
 
 import { computeState, todayISO, formatDateHuman } from './model.js';
 import * as store from './state.js';
+import { expandToWeekly } from './state.js';
 import { renderDashboard } from './ui/dashboard.js';
 import { renderHistory } from './ui/history.js';
 import { renderSettings, refreshSettingsComputed } from './ui/settings.js';
@@ -148,11 +149,18 @@ function commitSettings(patch) {
   if (ui.tab === 'settings') refreshSettingsComputed(app, store.getData().settings);
 }
 
-function setWeekdayWake(index, value) {
-  const weekdayWake = { ...store.getData().settings.weekdayWake };
-  if (value) weekdayWake[index] = value;
-  else delete weekdayWake[index];
-  commitSettings({ weekdayWake });
+/** Правка одного поля в расписании дня недели */
+function setDayField(index, variant, field, value) {
+  const settings = store.getData().settings;
+  const days = { ...settings.days };
+  const base = days[index] || { bedTime: settings.bedTime, wakeTime: settings.wakeTime };
+
+  if (variant === 'alt') {
+    days[index] = { ...base, alt: { ...(base.alt || base), [field]: value } };
+  } else {
+    days[index] = { ...base, [field]: value };
+  }
+  commitSettings({ days });
 }
 
 const ACTIONS = {
@@ -160,7 +168,31 @@ const ACTIONS = {
 
   'edit-day': (el) => openCheckin(el.dataset.date),
 
-  'reset-weekday': (el) => setWeekdayWake(Number(el.dataset.weekday), null),
+  // Переключение режима и чередования меняют структуру экрана,
+  // поэтому здесь нужен обычный полный перерендер.
+  mode: (el) => {
+    const mode = el.dataset.mode;
+    const settings = store.getData().settings;
+    if (settings.scheduleMode === mode) return;
+    store.updateSettings(mode === 'weekly'
+      ? { scheduleMode: 'weekly', days: expandToWeekly(settings) }
+      : { scheduleMode: 'simple' });
+  },
+
+  'toggle-alt': (el) => {
+    const index = Number(el.dataset.weekday);
+    const settings = store.getData().settings;
+    const days = { ...settings.days };
+    const base = days[index] || { bedTime: settings.bedTime, wakeTime: settings.wakeTime };
+
+    if (base.alt) {
+      const { alt, ...rest } = base;
+      days[index] = rest;
+    } else {
+      days[index] = { ...base, alt: { bedTime: base.bedTime, wakeTime: base.wakeTime } };
+    }
+    store.updateSettings({ days });
+  },
 
   month: (el) => {
     ui.month = el.dataset.month;
@@ -217,8 +249,9 @@ app.addEventListener('change', (event) => {
     return;
   }
 
-  if (el.dataset.weekday !== undefined && el.tagName === 'INPUT') {
-    setWeekdayWake(Number(el.dataset.weekday), el.value || null);
+  if (el.dataset.day !== undefined && el.tagName === 'INPUT') {
+    if (!el.value) return;
+    setDayField(Number(el.dataset.day), el.dataset.variant, el.dataset.field, el.value);
   }
 });
 

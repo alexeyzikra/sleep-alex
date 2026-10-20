@@ -103,54 +103,120 @@ export function weekdayIndexMonday(iso) {
   return (parseISO(iso).getDay() + 6) % 7;
 }
 
+// ---------- Чётность недели ----------
+
+/**
+ * Номер недели по ISO 8601 — тот же, что показывают календари.
+ * Нужен для расписаний, которые чередуются через неделю.
+ */
+export function isoWeek(dateISO) {
+  const date = parseISO(dateISO);
+  const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  // Переходим на четверг своей недели: по ISO год недели определяет именно он
+  target.setDate(target.getDate() - ((target.getDay() + 6) % 7) + 3);
+
+  const firstThursday = new Date(target.getFullYear(), 0, 4);
+  firstThursday.setDate(firstThursday.getDate() - ((firstThursday.getDay() + 6) % 7) + 3);
+
+  return 1 + Math.round((target - firstThursday) / (7 * 86400000));
+}
+
+/** 'even' — чётная неделя, 'odd' — нечётная */
+export function weekParity(dateISO) {
+  return isoWeek(dateISO) % 2 === 0 ? 'even' : 'odd';
+}
+
+export const PARITY_LABELS = { even: 'чёт', odd: 'нечёт' };
+
 // ---------- План на конкретную ночь ----------
+
+/** Промежуток между отбоем и подъёмом, с переходом через полночь */
+function spanOf(bedTime, wakeTime) {
+  const wakeClock = toMinutes(wakeTime);
+  const bedClock = toMinutes(bedTime);
+  const bedAbs = bedClock > wakeClock ? bedClock - 1440 : bedClock;
+  return { bedTime, wakeTime, bedClock, wakeClock, bedAbs, durationMinutes: wakeClock - bedAbs };
+}
+
+/** Расписание конкретного дня недели, с учётом чётности, или null */
+function daySchedule(settings, dayOfWeek, parity) {
+  if (settings.scheduleMode !== 'weekly') return null;
+  const day = settings.days && settings.days[dayOfWeek];
+  if (!day) return null;
+  // Основной вариант — чётная неделя, alt — нечётная.
+  // Нет alt — день одинаков обе недели.
+  return (day.alt && parity === 'odd') ? day.alt : day;
+}
+
+/**
+ * Якорь ритма — то, относительно чего считается «сдвиг плана».
+ *
+ * В простом режиме это единственное время подъёма. В недельном —
+ * медиана всех запланированных подъёмов, включая оба варианта
+ * чередующихся дней. Отдельной настройки якоря не нужно: он и так
+ * однозначно следует из расписания.
+ */
+export function anchorWake(settings) {
+  if (settings.scheduleMode !== 'weekly') return toMinutes(settings.wakeTime);
+
+  const times = [];
+  for (const day of WEEK_ORDER) {
+    const entry = settings.days && settings.days[day.index];
+    if (!entry) { times.push(toMinutes(settings.wakeTime)); continue; }
+    times.push(toMinutes(entry.wakeTime));
+    if (entry.alt) times.push(toMinutes(entry.alt.wakeTime));
+  }
+  const sorted = times.sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
 
 /**
  * Во сколько по плану надо лечь и встать именно в эту ночь.
  *
- * Подъём берётся из переопределения по дню недели, если оно задано,
- * иначе — базовый якорь. Норма часов НЕ вводится руками: она всегда
- * равна промежутку между отбоем и подъёмом, поэтому противоречивые
- * настройки («ложусь в 23:00, встаю в 6:00, сплю 9 часов») невозможны
- * в принципе.
+ * Норма часов НЕ вводится руками: она всегда равна промежутку между
+ * отбоем и подъёмом, поэтому противоречивые настройки («ложусь в 23:00,
+ * встаю в 6:00, сплю 9 часов») невозможны в принципе.
  */
 export function plannedFor(dateISO, settings) {
   const dayOfWeek = parseISO(dateISO).getDay();
-  const override = settings.weekdayWake ? settings.weekdayWake[dayOfWeek] : null;
-  const wakeTime = override || settings.wakeTime;
+  const parity = weekParity(dateISO);
+  const scheduled = daySchedule(settings, dayOfWeek, parity);
 
-  const wakeClock = toMinutes(wakeTime);
-  const bedClock = toMinutes(settings.bedTime);
-  const bedAbs = bedClock > wakeClock ? bedClock - 1440 : bedClock;
+  const span = scheduled
+    ? spanOf(scheduled.bedTime, scheduled.wakeTime)
+    : spanOf(settings.bedTime, settings.wakeTime);
 
-  // Насколько план этого дня уехал от базового якоря подъёма
-  const driftFromAnchor = circularDistance(wakeClock, toMinutes(settings.wakeTime));
+  const entry = settings.days && settings.days[dayOfWeek];
 
   return {
-    bedTime: settings.bedTime,
-    wakeTime,
-    bedClock,
-    wakeClock,
-    bedAbs,
-    durationMinutes: wakeClock - bedAbs,
-    isOverride: Boolean(override) && override !== settings.wakeTime,
-    driftFromAnchor,
+    ...span,
+    parity,
+    week: isoWeek(dateISO),
+    alternates: Boolean(settings.scheduleMode === 'weekly' && entry && entry.alt),
+    isWeekly: settings.scheduleMode === 'weekly',
+    driftFromAnchor: circularDistance(span.wakeClock, anchorWake(settings)),
   };
 }
 
-/** Норма сна по дням недели — для показа в настройках */
+/** Раскладка недели для экрана настроек */
 export function weeklyPlan(settings) {
+  const anchor = anchorWake(settings);
+
   return WEEK_ORDER.map((day) => {
-    const wakeTime = (settings.weekdayWake && settings.weekdayWake[day.index]) || settings.wakeTime;
-    const wakeClock = toMinutes(wakeTime);
-    const bedClock = toMinutes(settings.bedTime);
-    const bedAbs = bedClock > wakeClock ? bedClock - 1440 : bedClock;
+    const entry = (settings.days && settings.days[day.index])
+      || { bedTime: settings.bedTime, wakeTime: settings.wakeTime };
+
+    const variant = (source) => {
+      const span = spanOf(source.bedTime, source.wakeTime);
+      return { ...span, driftFromAnchor: circularDistance(span.wakeClock, anchor) };
+    };
+
     return {
       ...day,
-      wakeTime,
-      durationMinutes: wakeClock - bedAbs,
-      isOverride: Boolean(settings.weekdayWake && settings.weekdayWake[day.index]),
-      driftFromAnchor: circularDistance(wakeClock, toMinutes(settings.wakeTime)),
+      main: variant(entry),
+      alt: entry.alt ? variant(entry.alt) : null,
+      alternates: Boolean(entry.alt),
     };
   });
 }
@@ -288,7 +354,7 @@ export function scoreEntry(entry, settings, context = {}) {
   // 4. Сам план этого дня уехал от якоря подъёма
   const driftExcess = Math.max(0, plan.driftFromAnchor - PENALTY.planDriftGraceMin);
   add('План дня сдвинут от обычного подъёма', driftExcess * PENALTY.planDriftPerMin,
-    `${plan.wakeTime} против обычных ${settings.wakeTime}`);
+    `${plan.wakeTime} против обычных ${fromMinutes(anchorWake(settings))}`);
 
   // 5. Гигиена сна
   for (const [key, points] of Object.entries(PENALTY.hygiene)) {

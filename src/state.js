@@ -14,11 +14,14 @@ const STORAGE_KEY = 'sleepmaster.v1';
 export const DATA_VERSION = 1;
 
 export const DEFAULT_SETTINGS = {
+  // 'simple'  — одно время отбоя и подъёма на все дни
+  // 'weekly'  — своё расписание на каждый день недели
+  scheduleMode: 'simple',
   bedTime: '23:00',
   wakeTime: '07:30',
-  // Переопределения подъёма по дням недели, ключ — JS getDay() (вс = 0).
-  // Пусто = во все дни подъём по базовому времени.
-  weekdayWake: {},
+  // Расписание по дням недели, ключ — JS getDay() (вс = 0).
+  // У дня может быть alt — вариант для нечётных недель.
+  days: {},
 };
 
 /** Норма часов не хранится: она всегда выводится из отбоя и подъёма. */
@@ -40,26 +43,62 @@ export function migrateSettings(raw) {
   const legacyBed = incoming.bedWindow && incoming.bedWindow.start;
   const legacyWake = incoming.wakeWindow && incoming.wakeWindow.start;
 
-  const weekdayWake = {};
-  const source = incoming.weekdayWake && typeof incoming.weekdayWake === 'object'
-    ? incoming.weekdayWake : {};
-  for (const [day, value] of Object.entries(source)) {
-    const index = Number(day);
+  const bedTime = validTime(incoming.bedTime || legacyBed, DEFAULT_SETTINGS.bedTime);
+  const wakeTime = validTime(incoming.wakeTime || legacyWake, DEFAULT_SETTINGS.wakeTime);
+
+  const readVariant = (value) => {
+    if (!value || typeof value !== 'object') return null;
+    if (!TIME_RE.test(String(value.bedTime)) || !TIME_RE.test(String(value.wakeTime))) return null;
+    return { bedTime: String(value.bedTime), wakeTime: String(value.wakeTime) };
+  };
+
+  const days = {};
+  for (const [key, value] of Object.entries(incoming.days || {})) {
+    const index = Number(key);
     if (!Number.isInteger(index) || index < 0 || index > 6) continue;
-    if (TIME_RE.test(String(value))) weekdayWake[index] = String(value);
+    const main = readVariant(value);
+    if (!main) continue;
+    const alt = readVariant(value.alt);
+    days[index] = alt ? { ...main, alt } : main;
   }
 
-  return {
-    bedTime: validTime(incoming.bedTime || legacyBed, DEFAULT_SETTINGS.bedTime),
-    wakeTime: validTime(incoming.wakeTime || legacyWake, DEFAULT_SETTINGS.wakeTime),
-    weekdayWake,
-  };
+  // Старая схема: переопределялось только время подъёма, отбой был общий.
+  // Разворачиваем её в полноценное расписание по дням.
+  const legacyWeekday = incoming.weekdayWake;
+  if (!Object.keys(days).length && legacyWeekday && typeof legacyWeekday === 'object') {
+    const used = Object.entries(legacyWeekday)
+      .filter(([k, v]) => Number.isInteger(Number(k)) && TIME_RE.test(String(v)));
+    if (used.length) {
+      for (let index = 0; index <= 6; index++) {
+        const override = legacyWeekday[index];
+        days[index] = {
+          bedTime,
+          wakeTime: TIME_RE.test(String(override)) ? String(override) : wakeTime,
+        };
+      }
+    }
+  }
+
+  const mode = incoming.scheduleMode === 'weekly' || (!incoming.scheduleMode && Object.keys(days).length)
+    ? 'weekly'
+    : 'simple';
+
+  return { scheduleMode: mode, bedTime, wakeTime, days };
+}
+
+/** Заполняет расписание по дням текущим базовым временем */
+export function expandToWeekly(settings) {
+  const days = {};
+  for (let index = 0; index <= 6; index++) {
+    days[index] = settings.days[index] || { bedTime: settings.bedTime, wakeTime: settings.wakeTime };
+  }
+  return days;
 }
 
 function emptyData() {
   return {
     version: DATA_VERSION,
-    settings: { ...DEFAULT_SETTINGS, weekdayWake: {} },
+    settings: { ...DEFAULT_SETTINGS, days: {} },
     entries: {},
     meta: { onboarded: false, createdAt: new Date().toISOString(), lastExportAt: null },
   };
