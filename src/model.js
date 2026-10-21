@@ -243,11 +243,31 @@ export const PENALTY = {
   planDriftPerMin: 1.0,
   planDriftGraceMin: 60,
 
-  // Гигиена сна — фиксированные штрафы за невыполненный пункт
-  hygiene: {
-    noPhone: 55,   // экран перед сном — самый злободневный пункт, в одиночку уводит ночь из зелёного
-    noCaffeine: 35,
-    goodRoom: 20,
+  /**
+   * Экран перед сном. Шкала градуальная, а не пороговая: фиксированная
+   * отсечка «за 30 минут» в данных держится слабо (когортное исследование
+   * JAMA Pediatrics 2024 связи не нашло), а вот экран уже В КРОВАТИ —
+   * самый устойчивый сигнал (Frontiers 2025: +59% к шансам бессонницы
+   * за каждый лишний час). Поэтому время в кровати штрафуется круче.
+   * Час до сна как точка нуля — самая цитируемая рекомендация (AAP),
+   * но разброс в источниках 30–60 минут, так что цифра калибруемая.
+   */
+  phone: {
+    freeAfterMin: 60,    // отложил за час и раньше — штрафа нет
+    perMinBefore: 0.9,   // за каждую минуту, которой не хватило до часа
+    perMinInBed: 1.5,    // за каждую минуту экрана уже после отбоя
+    max: 200,   // потолок выше красной границы: по данным это сильнейший одиночный фактор
+  },
+
+  /**
+   * Нарушения отмечаются галочкой: по умолчанию ничего не нарушено
+   * и отмечать нечего. Обратный вариант («не пил кофе») заставлял бы
+   * каждое утро подтверждать то, что и так верно почти всегда.
+   */
+  violations: {
+    caffeine: 35,
+    badRoom: 20,
+    snoozed: 30,
   },
 };
 
@@ -268,11 +288,14 @@ export const GRADE_LABELS = {
   black: 'так нельзя',
 };
 
-export const HYGIENE_PENALTY_LABELS = {
-  noPhone: 'Телефон перед сном',
-  noCaffeine: 'Кофе или энергетики во второй половине дня',
-  goodRoom: 'Душная или светлая комната',
+export const VIOLATION_LABELS = {
+  caffeine: 'Кофе или энергетики во второй половине дня',
+  badRoom: 'Душная, жаркая или светлая комната',
+  snoozed: 'Вставал не с первого раза, откладывал будильник',
 };
+
+/** Отложил телефон за столько минут и раньше — чисто */
+export const PHONE_CLEAN_MINUTES = PENALTY.phone.freeAfterMin;
 
 // ---------- Разбор записи ----------
 
@@ -289,9 +312,15 @@ export function resolveEntry(entry) {
   const bedAbs = bedClock > wakeClock ? bedClock - 1440 : bedClock;
   const sleepMinutes = wakeClock - bedAbs;
 
+  // Телефон задаётся либо «за сколько минут до сна», либо точным временем.
+  // Промежуток — источник правды, если он указан: иначе правка времени
+  // отбоя молча меняла бы и его.
   let phoneAbs = null;
   let phoneFreeMinutes = null;
-  if (entry.phoneOffTime) {
+  if (Number.isFinite(entry.phoneGapMinutes)) {
+    phoneFreeMinutes = entry.phoneGapMinutes;
+    phoneAbs = bedAbs - phoneFreeMinutes;
+  } else if (entry.phoneOffTime) {
     const p = toMinutes(entry.phoneOffTime);
     // Выбираем ту календарную дату, при которой «отложил телефон»
     // оказывается ближе всего к отбою (в пределах ±12 часов).
@@ -356,10 +385,24 @@ export function scoreEntry(entry, settings, context = {}) {
   add('План дня сдвинут от обычного подъёма', driftExcess * PENALTY.planDriftPerMin,
     `${plan.wakeTime} против обычных ${fromMinutes(anchorWake(settings))}`);
 
-  // 5. Гигиена сна
-  for (const [key, points] of Object.entries(PENALTY.hygiene)) {
-    const done = Boolean(entry.hygiene && entry.hygiene[key]);
-    if (!done) add(HYGIENE_PENALTY_LABELS[key], points);
+  // 5. Экран перед сном — по времени, а не галочкой
+  const gap = r.phoneFreeMinutes;
+  if (gap !== null) {
+    const { freeAfterMin, perMinBefore, perMinInBed, max } = PENALTY.phone;
+    if (gap < 0) {
+      // Телефон уже в кровати: полный штраф «ноль минут» плюс время в кровати
+      const points = freeAfterMin * perMinBefore + (-gap) * perMinInBed;
+      add('Листал телефон уже в кровати', Math.min(points, max),
+        `${formatDuration(-gap)} после отбоя`);
+    } else if (gap < freeAfterMin) {
+      add('Отложил телефон слишком поздно', (freeAfterMin - gap) * perMinBefore,
+        `за ${formatDuration(gap)} до сна вместо часа`);
+    }
+  }
+
+  // 6. Отмеченные нарушения
+  for (const [key, points] of Object.entries(PENALTY.violations)) {
+    if (entry.violations && entry.violations[key]) add(VIOLATION_LABELS[key], points);
   }
 
   const totalPenalty = reasons.reduce((sum, item) => sum + item.points, 0);
@@ -505,7 +548,7 @@ export function computeState(data, today = todayISO()) {
   };
   const isClean = (d) => d.grade === 'green';
   const noBlack = (d) => d.grade !== 'black';
-  const noPhone = (d) => Boolean(d.entry.hygiene && d.entry.hygiene.noPhone);
+  const noPhone = (d) => d.phoneFreeMinutes !== null && d.phoneFreeMinutes >= PHONE_CLEAN_MINUTES;
 
   const cleanStreak = countFromEnd(isClean);
   const phoneStreak = countFromEnd(noPhone);
@@ -570,11 +613,19 @@ export function weekStats(days, today) {
   const bad = days.filter((d) => d.grade !== 'green');
   let worstFactor = null;
   if (bad.length >= 5) {
-    const counts = Object.keys(PENALTY.hygiene).map((key) => ({
-      key,
-      label: HYGIENE_PENALTY_LABELS[key],
-      count: bad.filter((d) => !(d.entry.hygiene && d.entry.hygiene[key])).length,
-    })).sort((a, b) => b.count - a.count);
+    const counts = [
+      ...Object.keys(PENALTY.violations).map((key) => ({
+        key,
+        label: VIOLATION_LABELS[key],
+        count: bad.filter((d) => d.entry.violations && d.entry.violations[key]).length,
+      })),
+      {
+        key: 'phone',
+        label: 'Поздно отложенный телефон',
+        count: bad.filter((d) => d.phoneFreeMinutes !== null
+          && d.phoneFreeMinutes < PHONE_CLEAN_MINUTES).length,
+      },
+    ].sort((a, b) => b.count - a.count);
     if (counts[0].count > 0) worstFactor = { ...counts[0], of: bad.length };
   }
 
@@ -613,7 +664,7 @@ export const MILESTONES = [
   { id: 'noblack7', title: 'Неделя без срывов', unit: 'ночей', target: 7,
     current: (s) => s.noBlackStreak, best: (s) => s.bestNoBlackStreak },
 
-  { id: 'phone7', title: 'Неделя без телефона перед сном', unit: 'ночей', target: 7,
+  { id: 'phone7', title: 'Неделя с телефоном отложенным за час', unit: 'ночей', target: 7,
     current: (s) => s.phoneStreak, best: (s) => s.bestPhoneStreak },
 
   { id: 'clean10', title: 'Десять чистых ночей подряд', unit: 'ночей', target: 10,

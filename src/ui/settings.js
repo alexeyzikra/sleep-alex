@@ -161,6 +161,22 @@ export function renderSettings(state) {
       ${scheduleCard(state.settings)}
 
       <section class="card">
+        <h2 class="card-title">Чек-ин</h2>
+        <label class="field-label">Как отмечать телефон</label>
+        <div class="segmented">
+          <button class="${state.settings.phoneInput === 'clock' ? '' : 'active'}"
+                  data-action="phone-input" data-mode="offset">За сколько до сна</button>
+          <button class="${state.settings.phoneInput === 'clock' ? 'active' : ''}"
+                  data-action="phone-input" data-mode="clock">Точное время</button>
+        </div>
+        <div class="field-hint" style="margin-top:-4px">
+          Штраф в обоих случаях считается одинаково — по тому, сколько
+          времени прошло между телефоном и отбоем. Отложил за час и раньше —
+          штрафа нет, в кровати — штраф растёт быстрее всего.
+        </div>
+      </section>
+
+      <section class="card">
         <h2 class="card-title">Бэкап и перенос</h2>
         <p class="small muted" style="margin:0 0 13px">
           История хранится только в этом браузере. Импорт сливает записи

@@ -398,7 +398,50 @@ input[type='range'] {
 /* Энергия */
 .energy-head { display: flex; justify-content: space-between; align-items: baseline; }
 .energy-value { font-size: 14.5px; font-weight: 600; }
-.energy-scale { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-faint); margin-top: -4px; }
+/* Деления под ползунком: видно, на каком ты сейчас, без отсчёта глазами */
+.energy-scale {
+  display: flex;
+  justify-content: space-between;
+  margin-top: -2px;
+  padding: 0 2px;
+}
+.energy-scale span {
+  flex: 1;
+  text-align: center;
+  font-size: 10.5px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  padding-top: 3px;
+  border-top: 1px solid var(--border);
+  transition: color 0.12s;
+}
+.energy-scale span.on { color: var(--accent); font-weight: 700; border-top-color: var(--accent); }
+
+/* Быстрый выбор «за сколько до сна» */
+.chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.chip {
+  padding: 9px 13px;
+  border-radius: 99px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 13.5px;
+  color: var(--text-dim);
+  transition: background 0.14s, color 0.14s, border-color 0.14s;
+}
+.chip:hover { background: #2b3446; color: var(--text); }
+.chip.on {
+  background: var(--accent-wash);
+  border-color: rgba(124, 140, 248, 0.45);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* Галочки теперь отмечают нарушения, поэтому активная — тревожная */
+.check.bad.on {
+  background: var(--yellow-wash);
+  border-color: rgba(214, 164, 80, 0.4);
+}
+.check.bad input { accent-color: var(--yellow); }
 
 /* Живой подсчёт в форме */
 .live {

@@ -5,20 +5,42 @@ export function esc(value) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-export const ENERGY_LABELS = [
-  { upTo: 2, icon: '😵', label: 'Убитый' },
-  { upTo: 4, icon: '😩', label: 'Разбитый' },
-  { upTo: 6, icon: '😐', label: 'Нормально' },
-  { upTo: 8, icon: '🙂', label: 'Бодрый' },
-  { upTo: 10, icon: '⚡', label: 'Заряжен' },
+/** Своя реакция на каждое из десяти делений, а не одна на пару */
+export const ENERGY_LEVELS = [
+  { value: 1, icon: '💀', label: 'Разбитый' },
+  { value: 2, icon: '😵', label: 'Очень тяжело' },
+  { value: 3, icon: '😩', label: 'Вялый' },
+  { value: 4, icon: '😕', label: 'Так себе' },
+  { value: 5, icon: '😐', label: 'Нормально' },
+  { value: 6, icon: '🙂', label: 'Неплохо' },
+  { value: 7, icon: '😌', label: 'Бодрый' },
+  { value: 8, icon: '😃', label: 'Выспался' },
+  { value: 9, icon: '😁', label: 'Отлично' },
+  { value: 10, icon: '⚡', label: 'Как новый' },
 ];
 
 export function energyLabel(value) {
-  return ENERGY_LABELS.find((l) => value <= l.upTo) || ENERGY_LABELS[2];
+  return ENERGY_LEVELS[Math.min(10, Math.max(1, Math.round(value))) - 1];
 }
 
-export const HYGIENE_ITEMS = [
-  { key: 'noPhone', label: 'Не сидел в телефоне минимум 30 минут до сна' },
-  { key: 'noCaffeine', label: 'Не пил кофе и энергетики во второй половине дня' },
-  { key: 'goodRoom', label: 'Спал в проветренной и тёмной комнате' },
+/**
+ * Отмечаются именно НАРУШЕНИЯ: в обычную ночь ничего отмечать не нужно.
+ * Обратный вариант («не пил кофе») заставлял бы каждое утро
+ * подтверждать то, что и так верно почти всегда.
+ */
+export const VIOLATION_ITEMS = [
+  { key: 'caffeine', label: 'Пил кофе или энергетики во второй половине дня' },
+  { key: 'badRoom', label: 'Было душно, жарко или светло' },
+  { key: 'snoozed', label: 'Вставал не с первого раза, откладывал будильник' },
+];
+
+/** Быстрый выбор «за сколько до сна отложил телефон» — одно нажатие */
+export const PHONE_PRESETS = [
+  { value: -15, label: 'в кровати' },
+  { value: 0, label: 'перед сном' },
+  { value: 15, label: '15 мин' },
+  { value: 30, label: '30 мин' },
+  { value: 45, label: '45 мин' },
+  { value: 60, label: '1 час' },
+  { value: 120, label: '2 часа+' },
 ];

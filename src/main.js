@@ -179,6 +179,11 @@ const ACTIONS = {
       : { scheduleMode: 'simple' });
   },
 
+  'phone-input': (el) => {
+    if (store.getData().settings.phoneInput === el.dataset.mode) return;
+    store.updateSettings({ phoneInput: el.dataset.mode });
+  },
+
   'toggle-alt': (el) => {
     const index = Number(el.dataset.weekday);
     const settings = store.getData().settings;

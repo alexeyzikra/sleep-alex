@@ -17,6 +17,9 @@ export const DEFAULT_SETTINGS = {
   // 'simple'  — одно время отбоя и подъёма на все дни
   // 'weekly'  — своё расписание на каждый день недели
   scheduleMode: 'simple',
+  // Как отмечать телефон в чек-ине:
+  // 'offset' — «за сколько минут до сна», 'clock' — точное время
+  phoneInput: 'offset',
   bedTime: '23:00',
   wakeTime: '07:30',
   // Расписание по дням недели, ключ — JS getDay() (вс = 0).
@@ -37,6 +40,32 @@ function validTime(value, fallback) {
  * где вместо точного времени были окна «с — по» и норма часов руками.
  * Из окна берём его начало: это и есть время будильника.
  */
+/**
+ * Галочки раньше отмечали СОБЛЮДЁННУЮ гигиену, теперь — НАРУШЕНИЯ.
+ * Старое «не пил кофе: нет» означало штраф, поэтому разворачивается
+ * в «пил кофе: да»: так оценка прошлых ночей не меняется задним числом.
+ * Отметки про будильник в старых записях не было — остаётся пустой,
+ * выдумывать её нельзя.
+ */
+function migrateViolations(entry) {
+  if (entry.violations && typeof entry.violations === 'object') {
+    return {
+      caffeine: Boolean(entry.violations.caffeine),
+      badRoom: Boolean(entry.violations.badRoom),
+      snoozed: Boolean(entry.violations.snoozed),
+    };
+  }
+  const old = entry.hygiene;
+  if (!old || typeof old !== 'object') {
+    return { caffeine: false, badRoom: false, snoozed: false };
+  }
+  return {
+    caffeine: !old.noCaffeine,
+    badRoom: !old.goodRoom,
+    snoozed: false,
+  };
+}
+
 export function migrateSettings(raw) {
   const incoming = raw && typeof raw === 'object' ? raw : {};
 
@@ -83,7 +112,9 @@ export function migrateSettings(raw) {
     ? 'weekly'
     : 'simple';
 
-  return { scheduleMode: mode, bedTime, wakeTime, days };
+  const phoneInput = incoming.phoneInput === 'clock' ? 'clock' : 'offset';
+
+  return { scheduleMode: mode, phoneInput, bedTime, wakeTime, days };
 }
 
 /** Заполняет расписание по дням текущим базовым временем */
@@ -138,17 +169,15 @@ export function normalize(raw) {
   for (const [date, entry] of Object.entries(raw.entries || {})) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
     if (!entry || !entry.bedTime || !entry.wakeTime) continue;
+    const gap = Number(entry.phoneGapMinutes);
     entries[date] = {
       date,
       phoneOffTime: entry.phoneOffTime || null,
+      phoneGapMinutes: Number.isFinite(gap) ? gap : null,
       bedTime: entry.bedTime,
       wakeTime: entry.wakeTime,
       energy: Number(entry.energy) || 5,
-      hygiene: {
-        noPhone: Boolean(entry.hygiene && entry.hygiene.noPhone),
-        noCaffeine: Boolean(entry.hygiene && entry.hygiene.noCaffeine),
-        goodRoom: Boolean(entry.hygiene && entry.hygiene.goodRoom),
-      },
+      violations: migrateViolations(entry),
       note: entry.note || '',
       createdAt: entry.createdAt || new Date().toISOString(),
       updatedAt: entry.updatedAt || entry.createdAt || new Date().toISOString(),

@@ -6,18 +6,40 @@ import {
   validateEntry, scoreEntry, formatDuration, formatDateHuman, todayISO, GRADE_LABELS,
 } from '../model.js';
 import { getData, saveEntry, deleteEntry } from '../state.js';
-import { esc, energyLabel, HYGIENE_ITEMS } from './common.js';
+import { esc, energyLabel, ENERGY_LEVELS, VIOLATION_ITEMS, PHONE_PRESETS } from './common.js';
 
 function blankForm(date, settings) {
   return {
     date,
     phoneOffTime: '',
+    phoneGapMinutes: null,
     bedTime: settings.bedTime,
     wakeTime: settings.wakeTime,
     energy: 6,
-    hygiene: { noPhone: false, noCaffeine: false, goodRoom: false },
+    violations: { caffeine: false, badRoom: false, snoozed: false },
     note: '',
   };
+}
+
+/** Блок «во сколько отложил телефон» — выбор способа живёт в настройках */
+function phoneFieldHTML(form, settings) {
+  if (settings.phoneInput === 'clock') {
+    return `
+      <div class="field">
+        <label class="field-label" for="f-phone">Во сколько отложил телефон</label>
+        <input type="time" id="f-phone" name="phoneOffTime" value="${esc(form.phoneOffTime || '')}">
+      </div>`;
+  }
+
+  return `
+    <div class="field">
+      <label class="field-label">За сколько до сна отложил телефон</label>
+      <div class="chips" id="f-phone-chips">
+        ${PHONE_PRESETS.map((preset) => `
+          <button type="button" class="chip ${form.phoneGapMinutes === preset.value ? 'on' : ''}"
+                  data-gap="${preset.value}">${esc(preset.label)}</button>`).join('')}
+      </div>
+    </div>`;
 }
 
 function liveHTML(form, settings) {
@@ -33,6 +55,8 @@ function liveHTML(form, settings) {
     bits.push(`без телефона ${formatDuration(resolved.phoneFreeMinutes)} до сна`);
   }
   bits.push(`план ${score.plan.bedTime} → ${score.plan.wakeTime}`);
+  // Неотмеченный телефон не штрафуется — но и молчать об этом не стоит
+  if (resolved.phoneFreeMinutes === null) bits.push('телефон не отмечен');
 
   // Три самых дорогих нарушения: сразу видно, что именно стоило очков
   const top = [...score.reasons].sort((a, b) => b.points - a.points).slice(0, 3);
@@ -72,10 +96,7 @@ export function checkinSheet(date, ctx) {
         <input type="date" id="f-date" name="date" value="${esc(form.date)}" max="${todayISO()}">
       </div>
 
-      <div class="field">
-        <label class="field-label" for="f-phone">Во сколько отложил телефон <span class="muted">(можно пропустить)</span></label>
-        <input type="time" id="f-phone" name="phoneOffTime" value="${esc(form.phoneOffTime || '')}">
-      </div>
+      ${phoneFieldHTML(form, settings)}
 
       <div class="row">
         <div class="field">
@@ -95,16 +116,23 @@ export function checkinSheet(date, ctx) {
           <label class="field-label" for="f-energy" style="margin:0">Как себя чувствуешь</label>
           <span class="energy-value" id="energy-text">${energy.icon} ${esc(energy.label)}</span>
         </div>
-        <input type="range" id="f-energy" name="energy" min="1" max="10" step="1" value="${form.energy}">
-        <div class="energy-scale"><span>1</span><span>10</span></div>
+        <input type="range" id="f-energy" name="energy" min="1" max="10" step="1"
+               list="energy-ticks" value="${form.energy}">
+        <datalist id="energy-ticks">
+          ${ENERGY_LEVELS.map((l) => `<option value="${l.value}"></option>`).join('')}
+        </datalist>
+        <div class="energy-scale">
+          ${ENERGY_LEVELS.map((l) => `<span class="${l.value === form.energy ? 'on' : ''}"
+             data-tick="${l.value}">${l.value}</span>`).join('')}
+        </div>
       </div>
 
       <div class="field">
-        <label class="field-label">Гигиена сна</label>
+        <label class="field-label">Что пошло не так <span class="muted">(отмечай только нарушения)</span></label>
         <div class="checks">
-          ${HYGIENE_ITEMS.map((item) => `
-            <label class="check ${form.hygiene[item.key] ? 'on' : ''}" data-check="${item.key}">
-              <input type="checkbox" name="${item.key}" ${form.hygiene[item.key] ? 'checked' : ''}>
+          ${VIOLATION_ITEMS.map((item) => `
+            <label class="check bad ${form.violations[item.key] ? 'on' : ''}" data-check="${item.key}">
+              <input type="checkbox" name="${item.key}" ${form.violations[item.key] ? 'checked' : ''}>
               <span>${esc(item.label)}</span>
             </label>`).join('')}
         </div>
@@ -137,12 +165,30 @@ export function checkinSheet(date, ctx) {
       form.energy = Number(energyInput.value);
       const label = energyLabel(form.energy);
       energyText.textContent = `${label.icon} ${label.label}`;
+      root.querySelectorAll('[data-tick]').forEach((tick) => {
+        tick.classList.toggle('on', Number(tick.dataset.tick) === form.energy);
+      });
     });
+
+    const chips = root.querySelector('#f-phone-chips');
+    if (chips) {
+      chips.addEventListener('click', (event) => {
+        const chip = event.target.closest('.chip');
+        if (!chip) return;
+        const value = Number(chip.dataset.gap);
+        // Повторное нажатие снимает отметку: ночь без ответа лучше, чем с выдуманным
+        form.phoneGapMinutes = form.phoneGapMinutes === value ? null : value;
+        chips.querySelectorAll('.chip').forEach((c) => {
+          c.classList.toggle('on', Number(c.dataset.gap) === form.phoneGapMinutes);
+        });
+        refreshLive();
+      });
+    }
 
     root.querySelectorAll('.check').forEach((label) => {
       const box = label.querySelector('input');
       box.addEventListener('change', () => {
-        form.hygiene[label.dataset.check] = box.checked;
+        form.violations[label.dataset.check] = box.checked;
         label.classList.toggle('on', box.checked);
         refreshLive();
       });
