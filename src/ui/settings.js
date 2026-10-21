@@ -131,7 +131,7 @@ function scheduleCard(settings) {
       </section>`;
   }
 
-  const parity = weekParity(today) === 'even' ? 'чётная' : 'нечётная';
+  const isEven = weekParity(today, settings) === 'even';
 
   return `
     <section class="card">
@@ -140,8 +140,17 @@ function scheduleCard(settings) {
       <div class="dayblocks">${weeklyPlan(settings).map(dayBlock).join('')}</div>
       <div class="field-hint" style="margin-top:14px">
         Кнопка ⇄ у дня включает разное расписание по чётным и нечётным
-        неделям — для пар, которые идут через неделю. Сейчас идёт
-        <strong>${parity} неделя</strong> (№${isoWeek(today)}).
+        неделям — для пар, которые идут через неделю.
+      </div>
+      <div class="parity-row">
+        <span>Сейчас <strong>${isEven ? 'чётная' : 'нечётная'} неделя</strong></span>
+        <button class="btn btn-sm" data-action="flip-parity">Нет, ${isEven ? 'нечётная' : 'чётная'}</button>
+      </div>
+      <div class="field-hint" style="margin-top:8px">
+        Если это расходится с твоим расписанием, нажми — и нумерация
+        сдвинется на неделю. Отсчёт чётности в универе обычно идёт
+        от начала семестра, а не от начала года, так что угадать его
+        приложение не может.
       </div>
       <div class="field-hint" style="margin-top:8px">
         Обычный подъём — <strong data-anchor>${esc(fromMinutes(anchorWake(settings)))}</strong>

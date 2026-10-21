@@ -121,9 +121,18 @@ export function isoWeek(dateISO) {
   return 1 + Math.round((target - firstThursday) / (7 * 86400000));
 }
 
-/** 'even' — чётная неделя, 'odd' — нечётная */
-export function weekParity(dateISO) {
-  return isoWeek(dateISO) % 2 === 0 ? 'even' : 'odd';
+/**
+ * 'even' — чётная неделя, 'odd' — нечётная.
+ *
+ * Номер ISO-недели считается от начала года, а в учебном расписании
+ * чётность обычно отсчитывают от начала семестра — совпадать они
+ * не обязаны. Поэтому точка отсчёта не угадывается, а задаётся
+ * пользователем: weekParityOffset сдвигает нумерацию на единицу,
+ * если приложение разошлось с его расписанием.
+ */
+export function weekParity(dateISO, settings) {
+  const offset = Number(settings && settings.weekParityOffset) ? 1 : 0;
+  return (isoWeek(dateISO) + offset) % 2 === 0 ? 'even' : 'odd';
 }
 
 export const PARITY_LABELS = { even: 'чёт', odd: 'нечёт' };
@@ -180,7 +189,7 @@ export function anchorWake(settings) {
  */
 export function plannedFor(dateISO, settings) {
   const dayOfWeek = parseISO(dateISO).getDay();
-  const parity = weekParity(dateISO);
+  const parity = weekParity(dateISO, settings);
   const scheduled = daySchedule(settings, dayOfWeek, parity);
 
   const span = scheduled

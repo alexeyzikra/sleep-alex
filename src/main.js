@@ -179,6 +179,11 @@ const ACTIONS = {
       : { scheduleMode: 'simple' });
   },
 
+  'flip-parity': () => {
+    const current = store.getData().settings.weekParityOffset;
+    store.updateSettings({ weekParityOffset: current ? 0 : 1 });
+  },
+
   'phone-input': (el) => {
     if (store.getData().settings.phoneInput === el.dataset.mode) return;
     store.updateSettings({ phoneInput: el.dataset.mode });

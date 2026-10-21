@@ -692,3 +692,18 @@ input[type='range'] {
 .live-reasons b { color: var(--yellow); font-weight: 650; }
 .live.live-black { background: var(--black-wash); border-color: rgba(160, 92, 214, 0.3); }
 .live.live-red { background: var(--red-wash); border-color: rgba(211, 98, 92, 0.25); }
+
+/* Строка «сейчас чётная/нечётная неделя» с кнопкой сдвига */
+.parity-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 11px 13px;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  font-size: 13.5px;
+}
+.parity-row .btn { flex: none; }

@@ -23,6 +23,9 @@ export const DEFAULT_SETTINGS = {
   // Как отмечать телефон в чек-ине:
   // 'offset' — «за сколько минут до сна», 'clock' — точное время
   phoneInput: 'offset',
+  // Сдвиг чётности недели на единицу: ISO-нумерация от начала года
+  // не обязана совпадать с учебной от начала семестра
+  weekParityOffset: 0,
   bedTime: '23:00',
   wakeTime: '07:30',
   // Расписание по дням недели, ключ — JS getDay() (вс = 0).
@@ -117,7 +120,9 @@ export function migrateSettings(raw) {
 
   const phoneInput = incoming.phoneInput === 'clock' ? 'clock' : 'offset';
 
-  return { scheduleMode: mode, phoneInput, bedTime, wakeTime, days };
+  const weekParityOffset = Number(incoming.weekParityOffset) ? 1 : 0;
+
+  return { scheduleMode: mode, phoneInput, weekParityOffset, bedTime, wakeTime, days };
 }
 
 /** Заполняет расписание по дням текущим базовым временем */
