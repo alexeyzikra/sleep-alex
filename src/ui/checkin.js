@@ -6,7 +6,7 @@ import {
   validateEntry, scoreEntry, formatDuration, formatDateHuman, todayISO, GRADE_LABELS,
 } from '../model.js';
 import { getData, saveEntry, deleteEntry } from '../state.js';
-import { esc, energyLabel, ENERGY_LEVELS, VIOLATION_ITEMS, PHONE_PRESETS } from './common.js';
+import { esc, energyLabel, ENERGY_LEVELS, VIOLATION_ITEMS } from './common.js';
 
 function blankForm(date, settings) {
   return {
@@ -31,16 +31,30 @@ function phoneFieldHTML(form, settings) {
       </div>`;
   }
 
+  // Отрицательный промежуток = телефон отложен уже после отбоя.
+  // В поле всегда положительное число, направление задаёт галочка.
+  const inBed = Number.isFinite(form.phoneGapMinutes) && form.phoneGapMinutes < 0;
+  const magnitude = Number.isFinite(form.phoneGapMinutes) ? Math.abs(form.phoneGapMinutes) : '';
+
   return `
     <div class="field">
-      <label class="field-label">За сколько до сна отложил телефон</label>
-      <div class="chips" id="f-phone-chips">
-        ${PHONE_PRESETS.map((preset) => `
-          <button type="button" class="chip ${form.phoneGapMinutes === preset.value ? 'on' : ''}"
-                  data-gap="${preset.value}">${esc(preset.label)}</button>`).join('')}
+      <label class="field-label" for="f-phone-min" id="f-phone-label">${PHONE_LABELS[inBed ? 'inBed' : 'before']}</label>
+      <div class="minutes-field">
+        <input type="number" id="f-phone-min" inputmode="numeric"
+               min="0" max="600" step="5" placeholder="20" value="${magnitude}">
+        <span>мин</span>
       </div>
+      <label class="check bad ${inBed ? 'on' : ''}" id="f-phone-inbed-row">
+        <input type="checkbox" id="f-phone-inbed" ${inBed ? 'checked' : ''}>
+        <span>Листал телефон уже в кровати</span>
+      </label>
     </div>`;
 }
+
+const PHONE_LABELS = {
+  before: 'За сколько минут до сна отложил телефон',
+  inBed: 'Сколько минут листал телефон в кровати',
+};
 
 function liveHTML(form, settings) {
   const { errors, warnings, resolved } = validateEntry(form);
@@ -170,22 +184,27 @@ export function checkinSheet(date, ctx) {
       });
     });
 
-    const chips = root.querySelector('#f-phone-chips');
-    if (chips) {
-      chips.addEventListener('click', (event) => {
-        const chip = event.target.closest('.chip');
-        if (!chip) return;
-        const value = Number(chip.dataset.gap);
-        // Повторное нажатие снимает отметку: ночь без ответа лучше, чем с выдуманным
-        form.phoneGapMinutes = form.phoneGapMinutes === value ? null : value;
-        chips.querySelectorAll('.chip').forEach((c) => {
-          c.classList.toggle('on', Number(c.dataset.gap) === form.phoneGapMinutes);
-        });
+    const minutesInput = root.querySelector('#f-phone-min');
+    const inBedBox = root.querySelector('#f-phone-inbed');
+    if (minutesInput && inBedBox) {
+      const syncPhone = () => {
+        const raw = minutesInput.value.trim();
+        const number = Math.abs(Number(raw));
+        // Пустое поле — это «не отмечено», а не ноль минут
+        form.phoneGapMinutes = (raw === '' || !Number.isFinite(number))
+          ? null
+          : (inBedBox.checked ? -number : number);
+
+        root.querySelector('#f-phone-inbed-row').classList.toggle('on', inBedBox.checked);
+        root.querySelector('#f-phone-label').textContent =
+          PHONE_LABELS[inBedBox.checked ? 'inBed' : 'before'];
         refreshLive();
-      });
+      };
+      minutesInput.addEventListener('input', syncPhone);
+      inBedBox.addEventListener('change', syncPhone);
     }
 
-    root.querySelectorAll('.check').forEach((label) => {
+    root.querySelectorAll('.check[data-check]').forEach((label) => {
       const box = label.querySelector('input');
       box.addEventListener('change', () => {
         form.violations[label.dataset.check] = box.checked;

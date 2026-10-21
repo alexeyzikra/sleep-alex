@@ -710,7 +710,11 @@ export function validateEntry(entry) {
     if (r.sleepMinutes < 60) warnings.push('Меньше часа сна — это точно верные значения?');
     if (r.sleepMinutes > 14 * 60) warnings.push('Больше 14 часов сна — проверь, не перепутаны ли времена.');
   }
-  if (r.phoneFreeMinutes !== null && r.phoneFreeMinutes < 0) {
+  // Предупреждаем только если это похоже на опечатку во времени.
+  // Когда пользователь сам отметил «листал в кровати», говорить ему
+  // об этом нечего — он это и имел в виду.
+  const phoneSetExplicitly = Number.isFinite(entry.phoneGapMinutes);
+  if (!phoneSetExplicitly && r.phoneFreeMinutes !== null && r.phoneFreeMinutes < 0) {
     warnings.push(`Телефон отложен на ${formatDuration(-r.phoneFreeMinutes)} позже отбоя — значит, листал уже в кровати.`);
   }
   return { errors, warnings, resolved: r };

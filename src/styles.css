@@ -417,24 +417,20 @@ input[type='range'] {
 }
 .energy-scale span.on { color: var(--accent); font-weight: 700; border-top-color: var(--accent); }
 
-/* Быстрый выбор «за сколько до сна» */
-.chips { display: flex; flex-wrap: wrap; gap: 7px; }
-.chip {
-  padding: 9px 13px;
-  border-radius: 99px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  font-size: 13.5px;
-  color: var(--text-dim);
-  transition: background 0.14s, color 0.14s, border-color 0.14s;
+/* Поле «сколько минут» с подписью внутри */
+.minutes-field { position: relative; }
+.minutes-field input { padding-right: 52px; }
+.minutes-field span {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  color: var(--text-faint);
+  pointer-events: none;
 }
-.chip:hover { background: #2b3446; color: var(--text); }
-.chip.on {
-  background: var(--accent-wash);
-  border-color: rgba(124, 140, 248, 0.45);
-  color: var(--accent);
-  font-weight: 600;
-}
+
+#f-phone-inbed-row { margin-top: 9px; }
 
 /* Галочки теперь отмечают нарушения, поэтому активная — тревожная */
 .check.bad.on {

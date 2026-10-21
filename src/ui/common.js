@@ -34,13 +34,3 @@ export const VIOLATION_ITEMS = [
   { key: 'snoozed', label: 'Вставал не с первого раза, откладывал будильник' },
 ];
 
-/** Быстрый выбор «за сколько до сна отложил телефон» — одно нажатие */
-export const PHONE_PRESETS = [
-  { value: -15, label: 'в кровати' },
-  { value: 0, label: 'перед сном' },
-  { value: 15, label: '15 мин' },
-  { value: 30, label: '30 мин' },
-  { value: 45, label: '45 мин' },
-  { value: 60, label: '1 час' },
-  { value: 120, label: '2 часа+' },
-];
