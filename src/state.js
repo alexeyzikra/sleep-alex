@@ -8,9 +8,12 @@
 
 import { todayISO } from './model.js';
 
-// Ключ намеренно оставлен прежним при переименовании приложения:
-// поменяешь — и вся уже записанная история станет недоступна.
-const STORAGE_KEY = 'sleepmaster.v1';
+const STORAGE_KEY = 'sleep-control.v1';
+
+// Ключ от прежнего названия приложения. Читается ровно один раз —
+// при первом запуске после переименования, — чтобы уже записанные
+// ночи не остались висеть под недоступным именем.
+const LEGACY_STORAGE_KEY = 'sleepmaster.v1';
 export const DATA_VERSION = 1;
 
 export const DEFAULT_SETTINGS = {
@@ -140,7 +143,16 @@ export let storageAvailable = true;
 
 function readRaw() {
   try {
-    return localStorage.getItem(STORAGE_KEY);
+    const current = localStorage.getItem(STORAGE_KEY);
+    if (current !== null) return current;
+
+    const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (legacy !== null) {
+      localStorage.setItem(STORAGE_KEY, legacy);
+      localStorage.removeItem(LEGACY_STORAGE_KEY);
+      return legacy;
+    }
+    return null;
   } catch {
     storageAvailable = false;
     return null;
