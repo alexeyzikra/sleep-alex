@@ -1,5 +1,5 @@
 import {
-  formatDuration, formatSigned, fromMinutes, plannedFor,
+  formatDuration, formatSigned, plannedFor,
   GRADE_LABELS, GRADE_LIMITS, FORM_WINDOW,
 } from '../model.js';
 import { esc } from './common.js';
@@ -156,9 +156,10 @@ function lastNightCard(state) {
     </section>`;
 }
 
+// Только то, что относится к сегодняшней ночи. Статистика живёт
+// в «Истории» — здесь ей не место, это карточка плана, а не сводка.
 function targetCard(state) {
   const plan = plannedFor(state.today, state.settings);
-  const mid = state.stats.avgMidpoint;
 
   return `
     <section class="card">
@@ -178,10 +179,6 @@ function targetCard(state) {
           <span class="stat-label">Норма этой ночи</span>
           <span class="stat-value">${esc(formatDuration(plan.durationMinutes))}</span>
         </div>
-        ${mid !== null ? `<div class="stat">
-          <span class="stat-label">Середина сна за неделю</span>
-          <span class="stat-value">${esc(fromMinutes(mid))}</span>
-        </div>` : ''}
       </div>
     </section>`;
 }
