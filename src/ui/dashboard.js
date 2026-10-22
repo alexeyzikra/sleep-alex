@@ -142,12 +142,19 @@ function lastNightCard(state) {
         ${day.blackFlags.map(esc).join('<br>')}
       </div>` : ''}
 
-      ${day.reasons.length ? `<div class="divider"></div>
-        <div class="statlist">${day.reasons.map((r) => `
-          <div class="stat">
-            <span class="stat-label">${esc(r.label)}${r.detail ? `<br><span class="small" style="color:var(--text-faint)">${esc(r.detail)}</span>` : ''}</span>
-            <span class="stat-value" style="color:var(--yellow)">+${r.points}</span>
-          </div>`).join('')}</div>`
+      ${day.reasons.length || day.bonuses.length ? `<div class="divider"></div>
+        <div class="statlist">
+          ${day.reasons.map((r) => `
+            <div class="stat">
+              <span class="stat-label">${esc(r.label)}${r.detail ? `<br><span class="small" style="color:var(--text-faint)">${esc(r.detail)}</span>` : ''}</span>
+              <span class="stat-value" style="color:var(--yellow)">+${r.points}</span>
+            </div>`).join('')}
+          ${day.bonuses.map((b) => `
+            <div class="stat">
+              <span class="stat-label">${esc(b.label)}</span>
+              <span class="stat-value" style="color:var(--green)">−${b.points}</span>
+            </div>`).join('')}
+        </div>`
       : `<div class="divider"></div>
         <div class="small" style="color:var(--green)">Ни одного штрафного очка. Идеальная ночь.</div>`}
 

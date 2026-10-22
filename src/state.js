@@ -195,6 +195,7 @@ export function normalize(raw) {
       wakeTime: entry.wakeTime,
       energy: Number(entry.energy) || 5,
       violations: migrateViolations(entry),
+      bonuses: { morningLight: Boolean(entry.bonuses && entry.bonuses.morningLight) },
       note: entry.note || '',
       createdAt: entry.createdAt || new Date().toISOString(),
       updatedAt: entry.updatedAt || entry.createdAt || new Date().toISOString(),

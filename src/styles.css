@@ -439,6 +439,15 @@ input[type='range'] {
 }
 .check.bad input { accent-color: var(--yellow); }
 
+/* Положительное действие — гасит очки, поэтому зелёная */
+.check.good.on {
+  background: var(--green-wash);
+  border-color: rgba(79, 169, 124, 0.4);
+}
+.check.good input { accent-color: var(--green); }
+
+.live-reasons b.bonus { color: var(--green); }
+
 /* Живой подсчёт в форме */
 .live {
   background: var(--accent-wash);

@@ -6,7 +6,7 @@ import {
   validateEntry, scoreEntry, formatDuration, formatDateHuman, todayISO, GRADE_LABELS,
 } from '../model.js';
 import { getData, saveEntry, deleteEntry } from '../state.js';
-import { esc, energyLabel, ENERGY_LEVELS, VIOLATION_ITEMS } from './common.js';
+import { esc, energyLabel, ENERGY_LEVELS, VIOLATION_ITEMS, BONUS_ITEMS } from './common.js';
 
 function blankForm(date, settings) {
   return {
@@ -17,6 +17,7 @@ function blankForm(date, settings) {
     wakeTime: settings.wakeTime,
     energy: 6,
     violations: { caffeine: false, badRoom: false, snoozed: false },
+    bonuses: { morningLight: false },
     note: '',
   };
 }
@@ -87,6 +88,10 @@ function liveHTML(form, settings) {
       ${top.length
         ? `<div class="live-reasons">${top.map((r) => `<span>${esc(r.label)} <b>+${r.points}</b></span>`).join('')}</div>`
         : '<div class="live-reasons" style="color:var(--green)">Ни одного штрафного очка</div>'}
+      ${score.bonuses.length
+        ? `<div class="live-reasons">${score.bonuses.map((b) =>
+            `<span>${esc(b.label)} <b class="bonus">−${b.points}</b></span>`).join('')}</div>`
+        : ''}
       ${score.blackFlags.length
         ? `<div class="live-reasons" style="color:var(--black-grade)">${score.blackFlags.map(esc).join(' · ')}</div>`
         : ''}
@@ -153,6 +158,17 @@ export function checkinSheet(date, ctx) {
       </div>
 
       <div class="field">
+        <label class="field-label">Что сделал правильно</label>
+        <div class="checks">
+          ${BONUS_ITEMS.map((item) => `
+            <label class="check good ${form.bonuses[item.key] ? 'on' : ''}" data-bonus="${item.key}">
+              <input type="checkbox" name="${item.key}" ${form.bonuses[item.key] ? 'checked' : ''}>
+              <span>${esc(item.label)}</span>
+            </label>`).join('')}
+        </div>
+      </div>
+
+      <div class="field">
         <label class="field-label" for="f-note">Заметка <span class="muted">(не обязательно)</span></label>
         <textarea id="f-note" name="note" rows="2" placeholder="Например: не мог уснуть из-за кофе">${esc(form.note || '')}</textarea>
       </div>
@@ -203,6 +219,15 @@ export function checkinSheet(date, ctx) {
       minutesInput.addEventListener('input', syncPhone);
       inBedBox.addEventListener('change', syncPhone);
     }
+
+    root.querySelectorAll('.check[data-bonus]').forEach((label) => {
+      const box = label.querySelector('input');
+      box.addEventListener('change', () => {
+        form.bonuses[label.dataset.bonus] = box.checked;
+        label.classList.toggle('on', box.checked);
+        refreshLive();
+      });
+    });
 
     root.querySelectorAll('.check[data-check]').forEach((label) => {
       const box = label.querySelector('input');

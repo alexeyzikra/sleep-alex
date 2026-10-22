@@ -278,6 +278,17 @@ export const PENALTY = {
     badRoom: 20,
     snoozed: 30,
   },
+
+  /**
+   * Положительные действия: гасят набранные очки, а не добавляют свои.
+   * Утренний свет — главный задатчик циркадных часов, то есть бьёт
+   * ровно в ту цель, ради которой всё и затевалось. По весу примерно
+   * равен одному мелкому нарушению: день он вытянуть может, сорванную
+   * ночь — нет.
+   */
+  bonuses: {
+    morningLight: 30,
+  },
 };
 
 /** Границы уровней по сумме очков. Выше жёлтого — красный. */
@@ -306,6 +317,10 @@ export const GRADE_LABELS = {
   yellow: 'есть над чем поработать',
   red: 'режим сбит',
   black: 'так нельзя',
+};
+
+export const BONUS_LABELS = {
+  morningLight: 'Утром сразу вышел на свет',
 };
 
 export const VIOLATION_LABELS = {
@@ -425,7 +440,18 @@ export function scoreEntry(entry, settings, context = {}) {
     if (entry.violations && entry.violations[key]) add(VIOLATION_LABELS[key], points);
   }
 
-  const totalPenalty = reasons.reduce((sum, item) => sum + item.points, 0);
+  // 7. Положительные действия вычитаются из набранного
+  const bonuses = [];
+  for (const [key, points] of Object.entries(PENALTY.bonuses)) {
+    if (entry.bonuses && entry.bonuses[key]) {
+      bonuses.push({ label: BONUS_LABELS[key], points });
+    }
+  }
+
+  const rawPenalty = reasons.reduce((sum, item) => sum + item.points, 0);
+  const bonusTotal = bonuses.reduce((sum, item) => sum + item.points, 0);
+  // Ниже нуля не уходим: идеальная ночь не должна копить запас на будущее
+  const totalPenalty = Math.max(0, rawPenalty - bonusTotal);
 
   // Чёрный уровень — отдельные правила, а не сумма очков
   const blackFlags = [];
@@ -452,7 +478,7 @@ export function scoreEntry(entry, settings, context = {}) {
   return {
     ...r, entry, plan,
     wakeDeviation, bedDeviation, bedLate, sleepDeviation,
-    reasons, totalPenalty, blackFlags, grade,
+    reasons, bonuses, rawPenalty, bonusTotal, totalPenalty, blackFlags, grade,
   };
 }
 
