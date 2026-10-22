@@ -1,6 +1,6 @@
 import {
-  formatDuration, formatSigned, plannedFor,
-  GRADE_LABELS, GRADE_LIMITS, FORM_WINDOW,
+  formatDuration, formatSigned, fromMinutes, plannedFor,
+  GRADE_LABELS, GRADE_LIMITS, FORM_WINDOW, PHONE_CLEAN_MINUTES,
 } from '../model.js';
 import { esc } from './common.js';
 import { renderBarcode } from './barcode.js';
@@ -174,6 +174,10 @@ function targetCard(state) {
             ? ` <span class="small muted">(${plan.parity === 'even' ? 'чётная' : 'нечётная'} неделя)</span>`
             : (plan.isWeekly ? ' <span class="small muted">(по дню недели)</span>' : '')}</span>
           <span class="stat-value">${esc(plan.wakeTime)}</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Телефон убрать до</span>
+          <span class="stat-value">${esc(fromMinutes(plan.bedClock - PHONE_CLEAN_MINUTES))}</span>
         </div>
         <div class="stat">
           <span class="stat-label">Норма этой ночи</span>
