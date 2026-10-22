@@ -283,6 +283,17 @@ export const PENALTY = {
 /** Границы уровней по сумме очков. Выше жёлтого — красный. */
 export const GRADE_LIMITS = { green: 50, yellow: 180 };
 
+/**
+ * Порог «чистой ночи» для стрика — отдельный от зелёного уровня.
+ *
+ * Зелёный калиброван как «идеально», а стрик должен означать
+ * «стараюсь и в целом держусь»: мелкие отклонения складываются,
+ * и на бюджете в 50 очков обычная приличная ночь (чуть позже лёг,
+ * чуть позже встал, телефон за полчаса) уже не проходила бы —
+ * стрик рвался бы постоянно и демотивировал.
+ */
+export const STREAK_CLEAN_LIMIT = 100;
+
 /** Чёрный уровень — не по сумме, а по отдельным правилам «так нельзя». */
 export const BLACK_RULES = {
   minSleepMinutes: 240,     // меньше 4 часов сна
@@ -600,7 +611,8 @@ export function computeState(data, today = todayISO()) {
     }
     return n;
   };
-  const isClean = (d) => d.grade === 'green';
+  // Срыв не засчитывается никогда, даже если сумма очков невелика
+  const isClean = (d) => d.grade !== 'black' && d.totalPenalty <= STREAK_CLEAN_LIMIT;
   const noBlack = (d) => d.grade !== 'black';
   const noPhone = (d) => d.phoneFreeMinutes !== null && d.phoneFreeMinutes >= PHONE_CLEAN_MINUTES;
 
