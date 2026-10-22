@@ -459,6 +459,51 @@ function stdev(values) {
   return Math.sqrt(values.reduce((a, v) => a + (v - mean) ** 2, 0) / values.length);
 }
 
+/**
+ * Стрик записей: сколько дней подряд у тебя заполнены ночи.
+ *
+ * Считается по ДАТАМ, а не по моменту нажатия кнопки — заполнил
+ * пропущенную ночь задним числом, и стрик восстановился. Но если
+ * не вносить вообще ничего дольше пяти дней, он сгорает: после такой
+ * паузы счёт начинается заново, даже если пропущенное потом заполнить.
+ */
+export const RECORD_GRACE_DAYS = 5;
+
+export function recordingStreak(days, today) {
+  if (!days.length) return 0;
+
+  const filled = new Set(days.map((d) => d.entry.date));
+
+  // Моменты, когда пользователь реально садился заполнять
+  const stamps = days
+    .map((d) => Date.parse(d.entry.createdAt))
+    .filter((ms) => Number.isFinite(ms))
+    .sort((a, b) => a - b);
+
+  let restartedOn = null;
+  if (stamps.length) {
+    // Молчишь дольше отведённого прямо сейчас — стрик уже сгорел
+    const silentDays = (Date.now() - stamps[stamps.length - 1]) / 86400000;
+    if (silentDays > RECORD_GRACE_DAYS) return 0;
+
+    // Иначе ищем последнюю такую паузу: раньше неё стрик не тянется
+    for (let i = 1; i < stamps.length; i++) {
+      if ((stamps[i] - stamps[i - 1]) / 86400000 > RECORD_GRACE_DAYS) {
+        restartedOn = toISODate(new Date(stamps[i]));
+      }
+    }
+  }
+
+  // Сегодня ещё можно успеть записать, поэтому пустое «сегодня» стрик не рвёт
+  let cursor = filled.has(today) ? today : addDays(today, -1);
+  let streak = 0;
+  while (filled.has(cursor) && (!restartedOn || cursor >= restartedOn)) {
+    streak += 1;
+    cursor = addDays(cursor, -1);
+  }
+  return streak;
+}
+
 /** Сколько ночей нужно, чтобы «привычная середина сна» вообще что-то значила */
 const BASELINE_MIN_NIGHTS = 5;
 
@@ -562,6 +607,7 @@ export function computeState(data, today = todayISO()) {
   const cleanStreak = countFromEnd(isClean);
   const phoneStreak = countFromEnd(noPhone);
   const noBlackStreak = countFromEnd(noBlack);
+  const recordStreak = recordingStreak(days, today);
 
   // Лучший результат запоминается навсегда: сорванный стрик не должен
   // отбирать уже пройденную веху.
@@ -583,7 +629,7 @@ export function computeState(data, today = todayISO()) {
 
   const summary = {
     days, balance, stats,
-    cleanStreak, phoneStreak, noBlackStreak,
+    cleanStreak, phoneStreak, noBlackStreak, recordStreak,
     bestCleanStreak: bestOf(isClean),
     bestPhoneStreak: bestOf(noPhone),
     bestNoBlackStreak: bestOf(noBlack),

@@ -37,8 +37,8 @@ function balanceCard(state) {
 
 function streaksCard(state) {
   const items = [
+    { icon: '🔥', num: state.recordStreak, label: 'дней подряд<br>с записями' },
     { icon: '✅', num: state.cleanStreak, label: 'чистых ночей<br>подряд' },
-    { icon: '📱', num: state.phoneStreak, label: 'ночей подряд<br>без телефона' },
   ];
   return `<div class="streaks">${items.map((s) => `
     <div class="streak">
