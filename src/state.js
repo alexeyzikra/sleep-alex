@@ -6,7 +6,7 @@
  * приложение должно продолжать работать (пусть и без сохранения).
  */
 
-import { todayISO } from './model.js';
+import { todayISO, planSnapshot } from './model.js';
 
 const STORAGE_KEY = 'sleep-control.v1';
 
@@ -53,6 +53,17 @@ function validTime(value, fallback) {
  * Отметки про будильник в старых записях не было — остаётся пустой,
  * выдумывать её нельзя.
  */
+/** Снимок плана из записи: только если он полный, иначе null */
+function readPlanSnapshot(plan) {
+  if (!plan || typeof plan !== 'object') return null;
+  if (!TIME_RE.test(String(plan.bedTime)) || !TIME_RE.test(String(plan.wakeTime))) return null;
+  return {
+    bedTime: String(plan.bedTime),
+    wakeTime: String(plan.wakeTime),
+    anchor: TIME_RE.test(String(plan.anchor)) ? String(plan.anchor) : null,
+  };
+}
+
 function migrateViolations(entry) {
   if (entry.violations && typeof entry.violations === 'object') {
     return {
@@ -194,6 +205,10 @@ export function normalize(raw) {
       bedTime: entry.bedTime,
       wakeTime: entry.wakeTime,
       energy: Number(entry.energy) || 5,
+      // У записей, сделанных до появления снимков, его нет. Замораживаем
+      // по текущим настройкам: это и есть то расписание, при котором
+      // их записывали, а без снимка они поедут при первой же правке режима.
+      plan: readPlanSnapshot(entry.plan) || planSnapshot(date, settings),
       violations: migrateViolations(entry),
       bonuses: { morningLight: Boolean(entry.bonuses && entry.bonuses.morningLight) },
       note: entry.note || '',
@@ -243,8 +258,14 @@ function commit() {
 export function saveEntry(entry) {
   const now = new Date().toISOString();
   const existing = data.entries[entry.date];
+
+  // План фиксируется один раз — при создании записи. Правка полей
+  // существующей ночи его не трогает: расписание той ночи уже случилось.
+  const plan = (existing && existing.plan) || planSnapshot(entry.date, data.settings);
+
   data.entries[entry.date] = {
     ...entry,
+    plan,
     createdAt: existing ? existing.createdAt : now,
     updatedAt: now,
   };

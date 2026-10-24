@@ -186,15 +186,29 @@ export function anchorWake(settings) {
  * Норма часов НЕ вводится руками: она всегда равна промежутку между
  * отбоем и подъёмом, поэтому противоречивые настройки («ложусь в 23:00,
  * встаю в 6:00, сплю 9 часов») невозможны в принципе.
+ *
+ * Если у записи есть снимок плана (snapshot), берётся он. Расписание —
+ * исторический факт: какой у тебя был план в ту ночь. Иначе смена
+ * режима задним числом превращала бы прошлые идеальные ночи в провалы,
+ * потому что они оценивались бы по плану, которого тогда не было.
+ * Веса штрафов, наоборот, остаются общими и применяются ко всей истории.
  */
-export function plannedFor(dateISO, settings) {
+export function plannedFor(dateISO, settings, snapshot) {
   const dayOfWeek = parseISO(dateISO).getDay();
   const parity = weekParity(dateISO, settings);
   const scheduled = daySchedule(settings, dayOfWeek, parity);
 
-  const span = scheduled
-    ? spanOf(scheduled.bedTime, scheduled.wakeTime)
-    : spanOf(settings.bedTime, settings.wakeTime);
+  const frozen = snapshot && snapshot.bedTime && snapshot.wakeTime;
+
+  const span = frozen
+    ? spanOf(snapshot.bedTime, snapshot.wakeTime)
+    : (scheduled
+      ? spanOf(scheduled.bedTime, scheduled.wakeTime)
+      : spanOf(settings.bedTime, settings.wakeTime));
+
+  const anchor = (frozen && snapshot.anchor)
+    ? toMinutes(snapshot.anchor)
+    : anchorWake(settings);
 
   const entry = settings.days && settings.days[dayOfWeek];
 
@@ -202,9 +216,20 @@ export function plannedFor(dateISO, settings) {
     ...span,
     parity,
     week: isoWeek(dateISO),
+    frozen: Boolean(frozen),
     alternates: Boolean(settings.scheduleMode === 'weekly' && entry && entry.alt),
     isWeekly: settings.scheduleMode === 'weekly',
-    driftFromAnchor: circularDistance(span.wakeClock, anchorWake(settings)),
+    driftFromAnchor: circularDistance(span.wakeClock, anchor),
+  };
+}
+
+/** Снимок плана, который кладётся в запись в момент её создания */
+export function planSnapshot(dateISO, settings) {
+  const plan = plannedFor(dateISO, settings);
+  return {
+    bedTime: plan.bedTime,
+    wakeTime: plan.wakeTime,
+    anchor: fromMinutes(anchorWake(settings)),
   };
 }
 
@@ -378,7 +403,7 @@ export function resolveEntry(entry) {
  */
 export function scoreEntry(entry, settings, context = {}) {
   const r = resolveEntry(entry);
-  const plan = plannedFor(entry.date, settings);
+  const plan = plannedFor(entry.date, settings, entry.plan);
 
   const reasons = [];
   const add = (label, points, detail) => {
