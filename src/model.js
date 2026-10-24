@@ -288,8 +288,11 @@ export const PENALTY = {
    */
   phone: {
     freeAfterMin: 60,    // отложил за час и раньше — штрафа нет
-    perMinBefore: 0.9,   // за каждую минуту, которой не хватило до часа
-    perMinInBed: 1.5,    // за каждую минуту экрана уже после отбоя
+    // Срезано неравномерно и намеренно: отсечка «за час до сна»
+    // в данных держится слабо, а экран уже в кровати — сильный сигнал.
+    // Поэтому «до сна» вдвое дешевле прежнего, «в кровати» — в полтора.
+    perMinBefore: 0.45,
+    perMinInBed: 1.0,
     max: 200,   // потолок выше красной границы: по данным это сильнейший одиночный фактор
   },
 
@@ -314,6 +317,25 @@ export const PENALTY = {
   bonuses: {
     morningLight: 30,
   },
+};
+
+/**
+ * Скидка за то, что ты гасишь накопленный долг сна.
+ *
+ * Если баланс отрицательный, лечь раньше и поспать дольше — это
+ * осознанное отсыпание, а не нарушение режима, и штрафовать за него
+ * наравне с беспричинным пересыпом неправильно. Симметрично: накопил
+ * излишек — дешевле обходится недосып и поздний отбой.
+ *
+ * Подъём под скидку НЕ попадает: отсыпаться, вставая позже, — не тот
+ * способ, ритм ставит именно стабильное время подъёма.
+ *
+ * Баланс берётся ДО этой ночи, иначе ночь влияла бы на собственный штраф.
+ */
+export const BALANCE_RELIEF = {
+  windowDays: 7,
+  minMinutes: 30,   // меньше — шум, скидку не даём
+  factor: 0.5,
 };
 
 /** Границы уровней по сумме очков. Выше жёлтого — красный. */
@@ -420,24 +442,36 @@ export function scoreEntry(entry, settings, context = {}) {
     `на ${formatDuration(wakeDeviation)} (план ${plan.wakeTime})`
   );
 
+  // Накопленный долг или излишек до этой ночи
+  const balanceBefore = Number(context.balanceBefore) || 0;
+  const hasDebt = balanceBefore <= -BALANCE_RELIEF.minMinutes;
+  const hasSurplus = balanceBefore >= BALANCE_RELIEF.minMinutes;
+  const relief = (apply) => (apply ? BALANCE_RELIEF.factor : 1);
+  const reliefNote = (apply, reason) => (apply ? ` · вдвое меньше: ${reason}` : '');
+
   // 2. Отбой мимо плана
   const bedDeviationSigned = r.bedAbs - plan.bedAbs;
   const bedDeviation = Math.abs(bedDeviationSigned);
   const bedLate = bedDeviationSigned > 0;
+  // Лёг раньше при долге — отсыпаешься. Лёг позже при излишке — тратишь запас.
+  const bedRelief = bedLate ? hasSurplus : hasDebt;
   add(
     bedLate ? 'Лёг позже плана' : 'Лёг раньше плана',
-    bedDeviation * (bedLate ? PENALTY.bedLatePerMin : PENALTY.bedEarlyPerMin),
+    bedDeviation * (bedLate ? PENALTY.bedLatePerMin : PENALTY.bedEarlyPerMin) * relief(bedRelief),
     `на ${formatDuration(bedDeviation)} (план ${plan.bedTime})`
+      + reliefNote(bedRelief, bedLate ? 'есть запас часов' : 'гасишь долг сна')
   );
 
   // 3. Длительность сна мимо нормы этой ночи
   const sleepDeviation = r.sleepMinutes - plan.durationMinutes;
   if (sleepDeviation < 0) {
-    add('Недосып', -sleepDeviation * PENALTY.underSleepPerMin,
-      `${formatDuration(-sleepDeviation)} до нормы (${formatDuration(plan.durationMinutes)})`);
+    add('Недосып', -sleepDeviation * PENALTY.underSleepPerMin * relief(hasSurplus),
+      `${formatDuration(-sleepDeviation)} до нормы (${formatDuration(plan.durationMinutes)})`
+        + reliefNote(hasSurplus, 'есть запас часов'));
   } else {
-    add('Пересып', sleepDeviation * PENALTY.overSleepPerMin,
-      `${formatDuration(sleepDeviation)} сверх нормы (${formatDuration(plan.durationMinutes)})`);
+    add('Пересып', sleepDeviation * PENALTY.overSleepPerMin * relief(hasDebt),
+      `${formatDuration(sleepDeviation)} сверх нормы (${formatDuration(plan.durationMinutes)})`
+        + reliefNote(hasDebt, 'гасишь долг сна'));
   }
 
   // 4. Сам план этого дня уехал от якоря подъёма
@@ -650,7 +684,14 @@ export function computeState(data, today = todayISO()) {
     const baseline = midpointHistory.length >= BASELINE_MIN_NIGHTS
       ? median(midpointHistory.slice(-14))
       : null;
-    days.push(scoreEntry(entry, settings, { midpointBaseline: baseline }));
+    // Баланс по уже оценённым предыдущим ночам того же окна,
+    // что показано на дашборде, но без текущей ночи
+    const from = addDays(entry.date, -BALANCE_RELIEF.windowDays);
+    const balanceBefore = days
+      .filter((d) => d.entry.date >= from && d.entry.date < entry.date)
+      .reduce((sum, d) => sum + d.sleepDeviation, 0);
+
+    days.push(scoreEntry(entry, settings, { midpointBaseline: baseline, balanceBefore }));
     midpointHistory.push(days[days.length - 1].midpointAbs);
   }
 
