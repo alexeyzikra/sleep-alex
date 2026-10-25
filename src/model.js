@@ -35,6 +35,14 @@ export function formatDuration(min) {
   return sign + h + ' ч ' + m + ' мин';
 }
 
+/** Компактно, для узких колонок: 470 -> "7ч50", 480 -> "8ч" */
+export function formatCompact(min) {
+  const v = Math.max(0, Math.round(min));
+  const h = Math.floor(v / 60);
+  const m = v % 60;
+  return m === 0 ? `${h}ч` : `${h}ч${String(m).padStart(2, '0')}`;
+}
+
 /** Со знаком: "+35 мин", "−1 ч 10 мин", "0" */
 export function formatSigned(min) {
   const r = Math.round(min);
