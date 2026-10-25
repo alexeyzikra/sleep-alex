@@ -167,14 +167,15 @@ button { cursor: pointer; border: none; background: none; }
 
 /* ---------- Стрики ---------- */
 
-.streaks { display: flex; gap: var(--gap); }
+.streaks { display: flex; gap: 9px; }
 
 .streak {
   flex: 1;
+  min-width: 0;
   background: var(--surface);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
-  padding: 14px;
+  padding: 13px 7px;
   text-align: center;
 }
 
@@ -187,7 +188,7 @@ button { cursor: pointer; border: none; background: none; }
   letter-spacing: -0.5px;
 }
 .streak-num.zero { color: var(--text-faint); }
-.streak-label { font-size: 11.5px; color: var(--text-faint); margin-top: 3px; line-height: 1.3; }
+.streak-label { font-size: 10.5px; color: var(--text-faint); margin-top: 3px; line-height: 1.3; }
 
 /* ---------- Форма ---------- */
 

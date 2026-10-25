@@ -36,8 +36,11 @@ function balanceCard(state) {
 }
 
 function streaksCard(state) {
+  // От самого лояльного к самому строгому: записал → без срывов → чисто.
+  // Нижний всегда капает, пока держишься в рамках, даже если ночи так себе.
   const items = [
     { icon: '🔥', num: state.recordStreak, label: 'дней подряд<br>с записями' },
+    { icon: '🛡️', num: state.noBlackStreak, label: 'ночей подряд<br>без срывов' },
     { icon: '✅', num: state.cleanStreak, label: 'чистых ночей<br>подряд' },
   ];
   return `<div class="streaks">${items.map((s) => `
