@@ -4,17 +4,24 @@
 
 import {
   validateEntry, scoreEntry, formatDuration, formatDateHuman, todayISO, GRADE_LABELS,
+  plannedFor,
 } from '../model.js';
 import { getData, saveEntry, deleteEntry } from '../state.js';
 import { esc, energyLabel, ENERGY_LEVELS, VIOLATION_ITEMS, BONUS_ITEMS } from './common.js';
 
 function blankForm(date, settings) {
+  // Времена берутся из плана именно на этот день, а не из базовых
+  // настроек: в недельном режиме они расходятся, и форма подставляла
+  // бы чужие значения — со штрафом за отклонение, которого не было.
+  const plan = plannedFor(date, settings);
   return {
     date,
     phoneOffTime: '',
-    phoneGapMinutes: null,
-    bedTime: settings.bedTime,
-    wakeTime: settings.wakeTime,
+    // Ноль — «отложил прямо перед сном, в кровати не листал».
+    // Честнее пустого поля: ночь без ответа штрафа не получала вовсе.
+    phoneGapMinutes: 0,
+    bedTime: plan.bedTime,
+    wakeTime: plan.wakeTime,
     energy: 6,
     violations: { caffeine: false, badRoom: false, snoozed: false },
     bonuses: { morningLight: false },
@@ -182,9 +189,24 @@ export function checkinSheet(date, ctx) {
     const liveSlot = root.querySelector('#live-slot');
     const refreshLive = () => { liveSlot.innerHTML = liveHTML(form, settings); };
 
+    // Пока пользователь не правил времена руками, они остаются
+    // подстановкой и должны следовать за выбранной датой.
+    let timesTouched = Boolean(existing);
+
     root.querySelectorAll('input[type="time"], input[type="date"]').forEach((input) => {
       input.addEventListener('input', () => {
         form[input.name] = input.value || (input.name === 'phoneOffTime' ? '' : input.value);
+
+        if (input.name === 'bedTime' || input.name === 'wakeTime') timesTouched = true;
+
+        if (input.name === 'date' && input.value && !timesTouched) {
+          const plan = plannedFor(input.value, settings);
+          form.bedTime = plan.bedTime;
+          form.wakeTime = plan.wakeTime;
+          root.querySelector('#f-bed').value = plan.bedTime;
+          root.querySelector('#f-wake').value = plan.wakeTime;
+        }
+
         refreshLive();
       });
     });
