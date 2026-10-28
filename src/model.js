@@ -241,6 +241,53 @@ export function planSnapshot(dateISO, settings) {
   };
 }
 
+/** Самое частое значение; при ничьей — встреченное раньше по неделе */
+function mostFrequent(values) {
+  const counts = new Map();
+  for (const v of values) counts.set(v, (counts.get(v) || 0) + 1);
+
+  let best = values[0];
+  let bestCount = 0;
+  for (const v of values) {
+    const count = counts.get(v);
+    if (count > bestCount) { best = v; bestCount = count; }
+  }
+  return best;
+}
+
+/**
+ * Типичный план — одна пара времён на весь штрих-код.
+ *
+ * В недельном режиме расписание у каждого дня своё, но ломать линии
+ * по дням смысла нет: глазу нужна прямая, относительно которой видно
+ * разброс. Поэтому берутся самые частые времена отбоя и подъёма —
+ * в отличие от медианы они всегда совпадают с реальным днём расписания.
+ */
+export function referencePlan(settings) {
+  if (settings.scheduleMode !== 'weekly') {
+    return { ...spanOf(settings.bedTime, settings.wakeTime), isTypical: false };
+  }
+
+  const beds = [];
+  const wakes = [];
+  for (const day of WEEK_ORDER) {
+    const entry = settings.days && settings.days[day.index];
+    if (!entry) {
+      beds.push(settings.bedTime);
+      wakes.push(settings.wakeTime);
+      continue;
+    }
+    beds.push(entry.bedTime);
+    wakes.push(entry.wakeTime);
+    if (entry.alt) {
+      beds.push(entry.alt.bedTime);
+      wakes.push(entry.alt.wakeTime);
+    }
+  }
+
+  return { ...spanOf(mostFrequent(beds), mostFrequent(wakes)), isTypical: true };
+}
+
 /** Раскладка недели для экрана настроек */
 export function weeklyPlan(settings) {
   const anchor = anchorWake(settings);

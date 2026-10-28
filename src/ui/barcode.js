@@ -7,7 +7,9 @@
  * можно пробежаться по колонке и не вглядываться в полоски.
  */
 
-import { addDays, weekdayShort, fromMinutes, formatCompact, formatDuration } from '../model.js';
+import {
+  addDays, weekdayShort, fromMinutes, formatCompact, formatDuration, referencePlan,
+} from '../model.js';
 import { esc } from './common.js';
 
 // Ось: от 20:00 (−240 на шкале «минут от полуночи дня подъёма») до 12:00 (+720)
@@ -20,7 +22,8 @@ function position(minutes) {
 }
 
 const HOUR_PERCENT = (60 / AXIS_SPAN) * 100;
-const MIDNIGHT = position(0);
+
+const clamp = (value) => Math.max(0, Math.min(100, value));
 
 /**
  * Часовая сетка рисуется фоном трека, а не отдельными элементами:
@@ -30,12 +33,14 @@ const TRACK_GRID = `repeating-linear-gradient(to right,`
   + ` var(--border) 0 1px,`
   + ` transparent 1px ${HOUR_PERCENT}%)`;
 
-// Полночь — главный ориентир «лёг до или после», поэтому рисуется
-// поверх полоски (::after), а не фоном: иначе она пропадала бы ровно
-// в тех строках, где по ней и надо свериться.
-const MIDNIGHT_VAR = `--midnight:${MIDNIGHT}%`;
+// Границы планового окна рисуются поверх полосок (::before/::after),
+// а не фоном: как фон они пропадали бы ровно в тех строках, где по ним
+// и надо свериться.
 
 export function renderBarcode(state, days = 14) {
+  const ref = referencePlan(state.settings);
+  const guides = `--bed:${clamp(position(ref.bedAbs))}%;--wake:${clamp(position(ref.wakeClock))}%`;
+
   const rows = [];
   for (let i = days - 1; i >= 0; i--) {
     const date = addDays(state.today, -i);
@@ -53,7 +58,7 @@ export function renderBarcode(state, days = 14) {
     rows.push(
       `<div class="barcode-row">
          <div class="barcode-day">${esc(weekdayShort(date))}</div>
-         <div class="barcode-track" style="background-image:${TRACK_GRID};${MIDNIGHT_VAR}">${bar}</div>
+         <div class="barcode-track" style="background-image:${TRACK_GRID};${guides}">${bar}</div>
          <div class="barcode-dur">${duration}</div>
        </div>`
     );
@@ -62,7 +67,7 @@ export function renderBarcode(state, days = 14) {
   // Подписи через два часа: каждый час при ширине телефона сливается
   const ticks = [];
   for (let m = AXIS_FROM; m <= AXIS_TO; m += 120) {
-    ticks.push(`<span class="${m === 0 ? 'midnight' : ''}">${fromMinutes(m).slice(0, 2)}</span>`);
+    ticks.push(`<span>${fromMinutes(m).slice(0, 2)}</span>`);
   }
 
   return `
@@ -70,5 +75,9 @@ export function renderBarcode(state, days = 14) {
       <h2 class="card-title">Штрих-код сна · ${days} дней</h2>
       <div class="barcode">${rows.join('')}</div>
       <div class="barcode-scale">${ticks.join('')}</div>
+      <div class="barcode-legend">
+        <span class="barcode-legend-mark"></span>
+        ${ref.isTypical ? 'обычный план' : 'план'}: ${esc(ref.bedTime)} → ${esc(ref.wakeTime)}
+      </div>
     </section>`;
 }

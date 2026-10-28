@@ -263,15 +263,20 @@ button { cursor: pointer; border: none; background: none; }
   border-radius: 4px;
   overflow: hidden;
 }
+/* Границы планового окна. z-index поднимает их над полоской:
+   без него ::before рисовался бы под ней, как более ранний узел. */
+.barcode-track::before,
 .barcode-track::after {
   content: '';
   position: absolute;
-  left: var(--midnight);
   top: 0;
   bottom: 0;
   width: 1px;
-  background: rgba(255, 255, 255, 0.38);
+  z-index: 1;
+  background: rgba(255, 255, 255, 0.42);
 }
+.barcode-track::before { left: var(--bed); }
+.barcode-track::after { left: var(--wake); }
 .barcode-bar { position: absolute; top: 0; bottom: 0; border-radius: 3px; }
 .barcode-bar.green { background: var(--green); }
 .barcode-bar.yellow { background: var(--yellow); }
@@ -284,7 +289,20 @@ button { cursor: pointer; border: none; background: none; }
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
-.barcode-scale span.midnight { color: var(--text-dim); font-weight: 600; }
+.barcode-legend {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 9px 0 0 28px;
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+.barcode-legend-mark {
+  width: 1px;
+  height: 11px;
+  flex: none;
+  background: rgba(255, 255, 255, 0.42);
+}
 .barcode-scale {
   display: flex;
   justify-content: space-between;
