@@ -19,6 +19,22 @@ function position(minutes) {
   return ((minutes - AXIS_FROM) / AXIS_SPAN) * 100;
 }
 
+const HOUR_PERCENT = (60 / AXIS_SPAN) * 100;
+const MIDNIGHT = position(0);
+
+/**
+ * Часовая сетка рисуется фоном трека, а не отдельными элементами:
+ * иначе на четырнадцать строк пришлось бы больше двух сотен лишних узлов.
+ */
+const TRACK_GRID = `repeating-linear-gradient(to right,`
+  + ` var(--border) 0 1px,`
+  + ` transparent 1px ${HOUR_PERCENT}%)`;
+
+// Полночь — главный ориентир «лёг до или после», поэтому рисуется
+// поверх полоски (::after), а не фоном: иначе она пропадала бы ровно
+// в тех строках, где по ней и надо свериться.
+const MIDNIGHT_VAR = `--midnight:${MIDNIGHT}%`;
+
 export function renderBarcode(state, days = 14) {
   const rows = [];
   for (let i = days - 1; i >= 0; i--) {
@@ -37,19 +53,22 @@ export function renderBarcode(state, days = 14) {
     rows.push(
       `<div class="barcode-row">
          <div class="barcode-day">${esc(weekdayShort(date))}</div>
-         <div class="barcode-track">${bar}</div>
+         <div class="barcode-track" style="background-image:${TRACK_GRID};${MIDNIGHT_VAR}">${bar}</div>
          <div class="barcode-dur">${duration}</div>
        </div>`
     );
   }
 
-  const ticks = [-240, 0, 240, 480, 720]
-    .map((m) => `<span>${fromMinutes(m)}</span>`).join('');
+  // Подписи через два часа: каждый час при ширине телефона сливается
+  const ticks = [];
+  for (let m = AXIS_FROM; m <= AXIS_TO; m += 120) {
+    ticks.push(`<span class="${m === 0 ? 'midnight' : ''}">${fromMinutes(m).slice(0, 2)}</span>`);
+  }
 
   return `
     <section class="card">
       <h2 class="card-title">Штрих-код сна · ${days} дней</h2>
       <div class="barcode">${rows.join('')}</div>
-      <div class="barcode-scale">${ticks}</div>
+      <div class="barcode-scale">${ticks.join('')}</div>
     </section>`;
 }

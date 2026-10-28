@@ -257,10 +257,20 @@ button { cursor: pointer; border: none; background: none; }
 .barcode-track {
   position: relative;
   flex: 1;
+  min-width: 0;
   height: 13px;
-  background: var(--surface-2);
+  background-color: var(--surface-2);
   border-radius: 4px;
   overflow: hidden;
+}
+.barcode-track::after {
+  content: '';
+  position: absolute;
+  left: var(--midnight);
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.38);
 }
 .barcode-bar { position: absolute; top: 0; bottom: 0; border-radius: 3px; }
 .barcode-bar.green { background: var(--green); }
@@ -274,6 +284,7 @@ button { cursor: pointer; border: none; background: none; }
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+.barcode-scale span.midnight { color: var(--text-dim); font-weight: 600; }
 .barcode-scale {
   display: flex;
   justify-content: space-between;
