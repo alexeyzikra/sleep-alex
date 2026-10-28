@@ -375,21 +375,23 @@ export const PENALTY = {
 };
 
 /**
- * Скидка за то, что ты гасишь накопленный долг сна.
+ * Множитель штрафа в зависимости от накопленного баланса.
  *
- * Если баланс отрицательный, лечь раньше и поспать дольше — это
- * осознанное отсыпание, а не нарушение режима, и штрафовать за него
- * наравне с беспричинным пересыпом неправильно. Симметрично: накопил
- * излишек — дешевле обходится недосып и поздний отбой.
+ * Гасишь дисбаланс — вдвое дешевле: при долге лечь раньше и поспать
+ * дольше это осознанное отсыпание, а не нарушение режима. Углубляешь —
+ * вдвое дороже: недосып поверх долга бьёт сильнее отдельной короткой
+ * ночи, потому что вред от накопленного долга нелинеен.
  *
- * Подъём под скидку НЕ попадает: отсыпаться, вставая позже, — не тот
+ * Множители связаны одной константой: factor и обратный ему.
+ *
+ * Подъём не масштабируется НИКОГДА: отсыпаться, вставая позже, — не тот
  * способ, ритм ставит именно стабильное время подъёма.
  *
  * Баланс берётся ДО этой ночи, иначе ночь влияла бы на собственный штраф.
  */
 export const BALANCE_RELIEF = {
   windowDays: 7,
-  minMinutes: 30,   // меньше — шум, скидку не даём
+  minMinutes: 30,   // меньше — шум, ничего не меняем
   factor: 0.5,
 };
 
@@ -501,32 +503,55 @@ export function scoreEntry(entry, settings, context = {}) {
   const balanceBefore = Number(context.balanceBefore) || 0;
   const hasDebt = balanceBefore <= -BALANCE_RELIEF.minMinutes;
   const hasSurplus = balanceBefore >= BALANCE_RELIEF.minMinutes;
-  const relief = (apply) => (apply ? BALANCE_RELIEF.factor : 1);
-  const reliefNote = (apply, reason) => (apply ? ` · вдвое меньше: ${reason}` : '');
+  // 'repay' — гасишь дисбаланс, 'worsen' — углубляешь, null — баланс ровный
+  const direction = (repayWhen, worsenWhen) => {
+    if (repayWhen) return 'repay';
+    if (worsenWhen) return 'worsen';
+    return null;
+  };
+  const scale = (dir) => {
+    if (dir === 'repay') return BALANCE_RELIEF.factor;
+    if (dir === 'worsen') return 1 / BALANCE_RELIEF.factor;
+    return 1;
+  };
+  const scaleNote = (dir, debtWord, surplusWord) => {
+    if (!dir) return '';
+    const what = hasDebt ? debtWord : surplusWord;
+    return dir === 'repay' ? ` · вдвое меньше: ${what}` : ` · вдвое больше: ${what}`;
+  };
+  const DEBT = { repay: 'гасишь долг сна', worsen: 'углубляешь долг сна' };
+  const SURPLUS = { repay: 'тратишь запас часов', worsen: 'копишь лишние часы' };
 
   // 2. Отбой мимо плана
   const bedDeviationSigned = r.bedAbs - plan.bedAbs;
   const bedDeviation = Math.abs(bedDeviationSigned);
   const bedLate = bedDeviationSigned > 0;
-  // Лёг раньше при долге — отсыпаешься. Лёг позже при излишке — тратишь запас.
-  const bedRelief = bedLate ? hasSurplus : hasDebt;
+  // Лёг раньше: гасит долг, но при излишке копит лишние часы.
+  // Лёг позже: тратит запас, но при долге углубляет его.
+  const bedDir = bedLate
+    ? direction(hasSurplus, hasDebt)
+    : direction(hasDebt, hasSurplus);
   add(
     bedLate ? 'Лёг позже плана' : 'Лёг раньше плана',
-    bedDeviation * (bedLate ? PENALTY.bedLatePerMin : PENALTY.bedEarlyPerMin) * relief(bedRelief),
+    bedDeviation * (bedLate ? PENALTY.bedLatePerMin : PENALTY.bedEarlyPerMin) * scale(bedDir),
     `на ${formatDuration(bedDeviation)} (план ${plan.bedTime})`
-      + reliefNote(bedRelief, bedLate ? 'есть запас часов' : 'гасишь долг сна')
+      + scaleNote(bedDir, bedLate ? DEBT.worsen : DEBT.repay, bedLate ? SURPLUS.repay : SURPLUS.worsen)
   );
 
   // 3. Длительность сна мимо нормы этой ночи
   const sleepDeviation = r.sleepMinutes - plan.durationMinutes;
   if (sleepDeviation < 0) {
-    add('Недосып', -sleepDeviation * PENALTY.underSleepPerMin * relief(hasSurplus),
+    // Недосып тратит запас, но поверх долга углубляет его
+    const dir = direction(hasSurplus, hasDebt);
+    add('Недосып', -sleepDeviation * PENALTY.underSleepPerMin * scale(dir),
       `${formatDuration(-sleepDeviation)} до нормы (${formatDuration(plan.durationMinutes)})`
-        + reliefNote(hasSurplus, 'есть запас часов'));
+        + scaleNote(dir, DEBT.worsen, SURPLUS.repay));
   } else {
-    add('Пересып', sleepDeviation * PENALTY.overSleepPerMin * relief(hasDebt),
+    // Пересып гасит долг, но поверх запаса копит лишние часы
+    const dir = direction(hasDebt, hasSurplus);
+    add('Пересып', sleepDeviation * PENALTY.overSleepPerMin * scale(dir),
       `${formatDuration(sleepDeviation)} сверх нормы (${formatDuration(plan.durationMinutes)})`
-        + reliefNote(hasDebt, 'гасишь долг сна'));
+        + scaleNote(dir, DEBT.repay, SURPLUS.worsen));
   }
 
   // 4. Сам план этого дня уехал от якоря подъёма
