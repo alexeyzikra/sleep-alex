@@ -755,3 +755,76 @@ input[type='range'] {
   font-size: 13.5px;
 }
 .parity-row .btn { flex: none; }
+
+/* ---------- Выбор характеристики ---------- */
+
+.chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.chip {
+  padding: 8px 12px;
+  border-radius: 99px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--text-dim);
+  transition: background 0.14s, color 0.14s, border-color 0.14s;
+}
+.chip:hover { background: #2b3446; color: var(--text); }
+.chip.on {
+  background: var(--accent-wash);
+  border-color: rgba(124, 140, 248, 0.45);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ---------- График ---------- */
+
+.chart {
+  display: block;
+  width: 100%;
+  /* Высота из пропорций viewBox: при фиксированной высоте SVG
+     растягивался по одной оси и подписи выходили искажёнными. */
+  aspect-ratio: 320 / 170;
+  height: auto;
+  margin-top: 4px;
+  overflow: visible;
+}
+
+.chart-grid { stroke: var(--border-soft); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.chart-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.chart-plan {
+  fill: none;
+  stroke: var(--text-faint);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 4;
+  vector-effect: non-scaling-stroke;
+}
+.chart-dot { fill: var(--accent); }
+.chart-ylabel { fill: var(--text-faint); font-size: 9px; text-anchor: end; }
+.chart-xlabel { fill: var(--text-faint); font-size: 9px; }
+
+.stat-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 2px 0 10px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+.stat-summary b { color: var(--text); font-weight: 650; }
+
+.chart-note {
+  margin-top: 10px;
+  font-size: 11.5px;
+  color: var(--text-faint);
+  line-height: 1.4;
+}
+
+/* Четыре вкладки вместо трёх */
+.tab { font-size: 10px; }

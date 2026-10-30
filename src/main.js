@@ -6,15 +6,17 @@ import { expandToWeekly } from './state.js';
 import { renderDashboard } from './ui/dashboard.js';
 import { renderHistory } from './ui/history.js';
 import { renderSettings, refreshSettingsComputed } from './ui/settings.js';
+import { renderStats } from './ui/stats.js';
 import { checkinSheet } from './ui/checkin.js';
 
 const TABS = [
   { id: 'home', icon: '🌙', label: 'Главное' },
-  { id: 'history', icon: '📊', label: 'История' },
+  { id: 'history', icon: '📅', label: 'История' },
+  { id: 'stats', icon: '📈', label: 'Статистика' },
   { id: 'settings', icon: '⚙️', label: 'Настройки' },
 ];
 
-const ui = { tab: 'home', month: null };
+const ui = { tab: 'home', month: null, metric: 'duration', period: 'month' };
 
 const app = document.getElementById('app');
 const tabbar = document.getElementById('tabbar');
@@ -33,11 +35,14 @@ function render() {
   const state = computeState(store.getData(), todayISO());
   const flags = {
     month: ui.month,
+    metric: ui.metric,
+    period: ui.period,
     backupDue: store.backupReminderDue(),
     storageBlocked: !store.storageAvailable,
   };
 
   if (ui.tab === 'history') app.innerHTML = renderHistory(state, flags);
+  else if (ui.tab === 'stats') app.innerHTML = renderStats(state, flags);
   else if (ui.tab === 'settings') app.innerHTML = renderSettings(state, flags);
   else app.innerHTML = renderDashboard(state, flags);
 
@@ -206,6 +211,16 @@ const ACTIONS = {
 
   month: (el) => {
     ui.month = el.dataset.month;
+    render();
+  },
+
+  metric: (el) => {
+    ui.metric = el.dataset.metric;
+    render();
+  },
+
+  period: (el) => {
+    ui.period = el.dataset.period;
     render();
   },
 
