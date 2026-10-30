@@ -11,7 +11,50 @@ import { esc } from './common.js';
 const MONTH_NAMES = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
   'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
 
-function calendarCard(state, cursor) {
+export const CALENDAR_MODES = [
+  { key: 'penalty', label: 'Как спал' },
+  { key: 'energy', label: 'Как себя чувствовал' },
+];
+
+/**
+ * Десять оттенков самочувствия.
+ *
+ * Шкала та же красно-жёлто-зелёная, что у штрафов, а не отдельная
+ * палитра: два режима показывают одни и те же дни, и сравнивать их
+ * имеет смысл только в одних цветах. Самое интересное — расхождения:
+ * зелёный день по режиму и красный по самочувствию.
+ *
+ * Опорные цвета взяты осветлённые, те же, что у ячеек уровней, —
+ * иначе на тёмном фоне цифра в клетке не читалась бы.
+ */
+const ENERGY_ANCHORS = [
+  [235, 155, 150],  // 1 — разбитый
+  [232, 196, 136],  // 5-6 — нормально
+  [143, 214, 177],  // 10 — как новый
+];
+
+function mixChannel(from, to, t) {
+  return Math.round(from + (to - from) * t);
+}
+
+export function energyColor(value) {
+  const level = Math.min(10, Math.max(1, Math.round(value)));
+  const t = (level - 1) / 9;
+
+  const [from, to, local] = t < 0.5
+    ? [ENERGY_ANCHORS[0], ENERGY_ANCHORS[1], t * 2]
+    : [ENERGY_ANCHORS[1], ENERGY_ANCHORS[2], (t - 0.5) * 2];
+
+  const rgb = from.map((channel, i) => mixChannel(channel, to[i], local));
+  return {
+    text: `rgb(${rgb.join(',')})`,
+    bg: `rgba(${rgb.join(',')},0.18)`,
+    border: `rgba(${rgb.join(',')},0.45)`,
+  };
+}
+
+function calendarCard(state, cursor, mode) {
+  const byEnergy = mode === 'energy';
   const [year, month] = cursor.split('-').map(Number);
   const first = new Date(year, month - 1, 1);
   const daysInMonth = new Date(year, month, 0).getDate();
@@ -25,14 +68,28 @@ function calendarCard(state, cursor) {
     const iso = toISODate(new Date(year, month - 1, d));
     const day = state.byDate[iso];
     const classes = ['cal-cell'];
-    if (day) classes.push('filled', day.grade);
+    let tint = '';
+
+    if (day) {
+      classes.push('filled');
+      if (byEnergy) {
+        const color = energyColor(day.entry.energy);
+        tint = `background:${color.bg};border-color:${color.border};color:${color.text}`;
+      } else {
+        classes.push(day.grade);
+      }
+    }
     if (iso === today) classes.push('today');
+
     const future = iso > today;
     const title = day
-      ? `${formatDuration(day.sleepMinutes)} · ${day.entry.bedTime} → ${day.entry.wakeTime} · ${day.totalPenalty} штрафных`
+      ? `${formatDuration(day.sleepMinutes)} · ${day.entry.bedTime} → ${day.entry.wakeTime}`
+        + ` · ${day.totalPenalty} штрафных · самочувствие ${day.entry.energy}`
       : (future ? 'Ещё не наступило' : 'Нет записи');
+
     cells.push(
       `<button class="${classes.join(' ')}" ${future ? 'disabled' : ''}
+         ${tint ? `style="${tint}"` : ''}
          data-action="edit-day" data-date="${iso}" title="${esc(title)}">${d}</button>`
     );
   }
@@ -41,8 +98,16 @@ function calendarCard(state, cursor) {
   const prevMonth = month === 1 ? `${year - 1}-12` : `${year}-${String(month - 1).padStart(2, '0')}`;
   const nextDisabled = `${nextMonth}-01` > today;
 
+  const energyScale = Array.from({ length: 10 }, (_, i) =>
+    `<i style="background:${energyColor(i + 1).text}"></i>`).join('');
+
   return `
     <section class="card">
+      <div class="segmented">
+        ${CALENDAR_MODES.map((m) => `
+          <button class="${m.key === mode ? 'active' : ''}"
+                  data-action="calendar-mode" data-mode="${m.key}">${esc(m.label)}</button>`).join('')}
+      </div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
         <button class="btn btn-ghost btn-sm" data-action="month" data-month="${prevMonth}">‹</button>
         <strong style="font-size:15px">${MONTH_NAMES[month - 1]} ${year}</strong>
@@ -51,13 +116,16 @@ function calendarCard(state, cursor) {
       </div>
       <div class="cal-head">${['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'].map((d) => `<span>${d}</span>`).join('')}</div>
       <div class="cal-grid">${cells.join('')}</div>
-      <div class="legend">
+      ${byEnergy ? `<div class="legend">
+        <span class="energy-ramp">разбитый ${energyScale} как новый</span>
+        <span><i style="background:var(--surface-2)"></i>нет записи</span>
+      </div>` : `<div class="legend">
         <span><i style="background:var(--green)"></i>чисто</span>
         <span><i style="background:var(--yellow)"></i>есть штрафы</span>
         <span><i style="background:var(--red)"></i>режим сбит</span>
         <span><i style="background:var(--black-grade)"></i>срыв</span>
         <span><i style="background:var(--surface-2)"></i>нет записи</span>
-      </div>
+      </div>`}
     </section>`;
 }
 
@@ -132,9 +200,10 @@ function dayListCard(state) {
 
 export function renderHistory(state, flags) {
   const cursor = flags.month || state.today.slice(0, 7);
+  const mode = flags.calendarMode === 'energy' ? 'energy' : 'penalty';
   return `
     <div class="view">
-      ${calendarCard(state, cursor)}
+      ${calendarCard(state, cursor, mode)}
       ${statsCard(state)}
       ${dayListCard(state)}
     </div>`;

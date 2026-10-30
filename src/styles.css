@@ -828,3 +828,9 @@ input[type='range'] {
 
 /* Четыре вкладки вместо трёх */
 .tab { font-size: 10px; }
+
+/* Шкала самочувствия в легенде календаря */
+.energy-ramp { display: inline-flex; align-items: center; gap: 2px; }
+.energy-ramp i { width: 9px; height: 9px; border-radius: 2px; margin: 0 0 0 1px; }
+.energy-ramp i:first-of-type { margin-left: 5px; }
+.energy-ramp i:last-of-type { margin-right: 5px; }

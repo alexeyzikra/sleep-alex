@@ -16,7 +16,7 @@ const TABS = [
   { id: 'settings', icon: '⚙️', label: 'Настройки' },
 ];
 
-const ui = { tab: 'home', month: null, metric: 'duration', period: 'month' };
+const ui = { tab: 'home', month: null, metric: 'duration', period: 'month', calendarMode: 'penalty' };
 
 const app = document.getElementById('app');
 const tabbar = document.getElementById('tabbar');
@@ -37,6 +37,7 @@ function render() {
     month: ui.month,
     metric: ui.metric,
     period: ui.period,
+    calendarMode: ui.calendarMode,
     backupDue: store.backupReminderDue(),
     storageBlocked: !store.storageAvailable,
   };
@@ -216,6 +217,11 @@ const ACTIONS = {
 
   metric: (el) => {
     ui.metric = el.dataset.metric;
+    render();
+  },
+
+  'calendar-mode': (el) => {
+    ui.calendarMode = el.dataset.mode;
     render();
   },
 
