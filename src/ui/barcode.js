@@ -8,7 +8,7 @@
  */
 
 import {
-  addDays, weekdayShort, fromMinutes, formatCompact, formatDuration, referencePlan,
+  addDays, weekdayShort, fromMinutes, formatCompact, formatDuration, plannedFor,
 } from '../model.js';
 import { esc } from './common.js';
 
@@ -33,18 +33,31 @@ const TRACK_GRID = `repeating-linear-gradient(to right,`
   + ` var(--border) 0 1px,`
   + ` transparent 1px ${HOUR_PERCENT}%)`;
 
-// Границы планового окна рисуются поверх полосок (::before/::after),
-// а не фоном: как фон они пропадали бы ровно в тех строках, где по ним
-// и надо свериться.
+// Метки плана рисуются поверх полосок (::before/::after), а не фоном:
+// как фон они пропадали бы ровно в тех строках, где по ним и надо свериться.
+//
+// План у каждой строки свой: при недельном расписании сплошная вертикаль
+// врала бы в те дни, когда подъём другой. Поэтому линия разрывается по дням
+// и показывает, от какого времени считался штраф именно этой ночи.
+// У записанных дней берётся их снимок плана (day.plan) — тот, что действовал
+// тогда; у пустых — текущее расписание.
+
+/**
+ * В простом режиме план одинаков каждую ночь, и его стоит назвать числами.
+ * В недельном числа в подписи врали бы: у каждой строки свои.
+ */
+function legend(settings) {
+  if (settings.scheduleMode === 'weekly') return 'план на эту ночь';
+  return `план: ${esc(settings.bedTime)} → ${esc(settings.wakeTime)}`;
+}
 
 export function renderBarcode(state, days = 14) {
-  const ref = referencePlan(state.settings);
-  const guides = `--bed:${clamp(position(ref.bedAbs))}%;--wake:${clamp(position(ref.wakeClock))}%`;
-
   const rows = [];
   for (let i = days - 1; i >= 0; i--) {
     const date = addDays(state.today, -i);
     const day = state.byDate[date];
+    const plan = day ? day.plan : plannedFor(date, state.settings);
+    const guides = `--bed:${clamp(position(plan.bedAbs))}%;--wake:${clamp(position(plan.wakeClock))}%`;
     let bar = '';
     let duration = '';
     if (day) {
@@ -77,7 +90,7 @@ export function renderBarcode(state, days = 14) {
       <div class="barcode-scale">${ticks.join('')}</div>
       <div class="barcode-legend">
         <span class="barcode-legend-mark"></span>
-        ${ref.isTypical ? 'обычный план' : 'план'}: ${esc(ref.bedTime)} → ${esc(ref.wakeTime)}
+        ${legend(state.settings)}
       </div>
     </section>`;
 }
