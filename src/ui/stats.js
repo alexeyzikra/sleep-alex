@@ -35,6 +35,18 @@ export const METRICS = [
     format: fromMinutes, describe: fromMinutes,
   },
   {
+    /**
+     * Середина сна — одно число, описывающее, где ночь стоит
+     * на циферблате. Само по себе среднее за неделю бесполезно,
+     * а вот колебания от ночи к ночи и есть нестабильность режима,
+     * причём видно их в любой день, а не только на выходных.
+     */
+    key: 'midpoint', label: 'Середина сна', unit: '',
+    value: (d) => d.midpointAbs,
+    plan: (d) => (d.plan.bedAbs + d.plan.wakeClock) / 2,
+    format: fromMinutes, describe: fromMinutes,
+  },
+  {
     key: 'phone', label: 'Без телефона перед сном', unit: '',
     value: (d) => d.phoneFreeMinutes, plan: () => PHONE_CLEAN_MINUTES,
     format: compactSigned, describe: compactSigned,
