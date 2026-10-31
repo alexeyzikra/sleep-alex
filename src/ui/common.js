@@ -10,16 +10,16 @@ export function esc(value) {
 export const ENERGY_UNSET = { icon: '', label: 'не отмечено' };
 
 export const ENERGY_LEVELS = [
-  { value: 1, icon: '💀', label: 'Разбитый' },
-  { value: 2, icon: '😵', label: 'Очень тяжело' },
-  { value: 3, icon: '😩', label: 'Вялый' },
-  { value: 4, icon: '😕', label: 'Так себе' },
-  { value: 5, icon: '😐', label: 'Нормально' },
-  { value: 6, icon: '🙂', label: 'Неплохо' },
-  { value: 7, icon: '😌', label: 'Бодрый' },
-  { value: 8, icon: '😃', label: 'Выспался' },
-  { value: 9, icon: '😁', label: 'Отлично' },
-  { value: 10, icon: '⚡', label: 'Как новый' },
+  { value: 1, icon: '💀', label: 'Убитый' },
+  { value: 2, icon: '😵', label: 'Очень тяжко' },
+  { value: 3, icon: '😩', label: 'С трудом встал' },
+  { value: 4, icon: '🫩', label: 'Встал, но овощь' },
+  { value: 5, icon: '😕', label: 'Так себе' },
+  { value: 6, icon: '🙃', label: 'Нормик' },
+  { value: 7, icon: '😀', label: 'Неплохо' },
+  { value: 8, icon: '😁', label: 'Бодрый' },
+  { value: 9, icon: '⚡', label: 'Ой, хорошо' },
+  { value: 10, icon: '🤩', label: 'Отлично!' },
 ];
 
 export function energyLabel(value) {
