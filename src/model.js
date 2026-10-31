@@ -371,6 +371,7 @@ export const PENALTY = {
    */
   bonuses: {
     morningLight: 30,
+    morningExercise: 20,
   },
 };
 
@@ -425,6 +426,7 @@ export const GRADE_LABELS = {
 
 export const BONUS_LABELS = {
   morningLight: 'Утром сразу вышел на свет',
+  morningExercise: 'Сделал зарядку утром',
 };
 
 export const VIOLATION_LABELS = {
@@ -934,6 +936,25 @@ export function evaluateMilestones(summary) {
 }
 
 // ---------- Валидация формы ----------
+
+/**
+ * Поля, без которых запись не сохраняется.
+ *
+ * Галочки сюда не входят: снятая галочка — это полноценный ответ «нет»,
+ * а не пропуск. А вот пустое самочувствие или неотмеченный телефон —
+ * именно пропуск, и такие дыры потом уже не вспомнить.
+ */
+export function missingFields(entry) {
+  const missing = [];
+  if (!entry.date) missing.push({ field: 'date', label: 'дата' });
+  if (!entry.bedTime) missing.push({ field: 'bedTime', label: 'во сколько лёг' });
+  if (!entry.wakeTime) missing.push({ field: 'wakeTime', label: 'во сколько проснулся' });
+  if (!Number.isFinite(entry.phoneGapMinutes) && !entry.phoneOffTime) {
+    missing.push({ field: 'phone', label: 'телефон перед сном' });
+  }
+  if (!Number.isFinite(entry.energy)) missing.push({ field: 'energy', label: 'самочувствие' });
+  return missing;
+}
 
 export function validateEntry(entry) {
   const errors = [];

@@ -437,24 +437,29 @@ input[type='range'] {
 /* Энергия */
 .energy-head { display: flex; justify-content: space-between; align-items: baseline; }
 .energy-value { font-size: 14.5px; font-weight: 600; }
-/* Деления под ползунком: видно, на каком ты сейчас, без отсчёта глазами */
-.energy-scale {
-  display: flex;
-  justify-content: space-between;
-  margin-top: -2px;
-  padding: 0 2px;
-}
-.energy-scale span {
+/* Выбор самочувствия: ряд кнопок, а не ползунок. У ползунка всегда
+   есть позиция, то есть нельзя показать «ничего не выбрано», —
+   бегунок на серединке читался бы как настоящий ответ. */
+.energy-pick { display: flex; gap: 4px; }
+.energy-btn {
   flex: 1;
-  text-align: center;
-  font-size: 10.5px;
-  color: var(--text-faint);
+  min-width: 0;
+  height: 34px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--text-dim);
   font-variant-numeric: tabular-nums;
-  padding-top: 3px;
-  border-top: 1px solid var(--border);
-  transition: color 0.12s;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
-.energy-scale span.on { color: var(--accent); font-weight: 700; border-top-color: var(--accent); }
+.energy-btn:hover { background: #2b3446; color: var(--text); }
+.energy-btn.on {
+  background: var(--accent-wash);
+  border-color: rgba(124, 140, 248, 0.5);
+  color: var(--accent);
+  font-weight: 700;
+}
 
 /* Поле «сколько минут» с подписью внутри */
 .minutes-field { position: relative; }
@@ -834,3 +839,13 @@ input[type='range'] {
 .energy-ramp i { width: 9px; height: 9px; border-radius: 2px; margin: 0 0 0 1px; }
 .energy-ramp i:first-of-type { margin-left: 5px; }
 .energy-ramp i:last-of-type { margin-right: 5px; }
+
+/* Пропущенное обязательное поле */
+.field.missing > .field-label,
+.field.missing .energy-head .field-label { color: var(--red); }
+.field.missing input,
+.field.missing .energy-pick,
+.field.missing .minutes-field input {
+  border-color: rgba(211, 98, 92, 0.55);
+}
+.field.missing .energy-btn { border-color: rgba(211, 98, 92, 0.4); }

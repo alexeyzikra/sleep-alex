@@ -4,7 +4,7 @@
 
 import {
   validateEntry, scoreEntry, formatDuration, formatDateHuman, todayISO, GRADE_LABELS,
-  plannedFor,
+  plannedFor, missingFields,
 } from '../model.js';
 import { getData, saveEntry, deleteEntry } from '../state.js';
 import { esc, energyLabel, ENERGY_LEVELS, VIOLATION_ITEMS, BONUS_ITEMS } from './common.js';
@@ -22,9 +22,11 @@ function blankForm(date, settings) {
     phoneGapMinutes: 0,
     bedTime: plan.bedTime,
     wakeTime: plan.wakeTime,
-    energy: 6,
+    // Самочувствие не выставляется по умолчанию: «серединка» попала бы
+    // в статистику как настоящий ответ, хотя её никто не отмечал
+    energy: null,
     violations: { caffeine: false, badRoom: false, snoozed: false },
-    bonuses: { morningLight: false },
+    bonuses: { morningLight: false, morningExercise: false },
     note: '',
   };
 }
@@ -33,7 +35,7 @@ function blankForm(date, settings) {
 function phoneFieldHTML(form, settings) {
   if (settings.phoneInput === 'clock') {
     return `
-      <div class="field">
+      <div class="field" data-required="phone">
         <label class="field-label" for="f-phone">Во сколько отложил телефон</label>
         <input type="time" id="f-phone" name="phoneOffTime" value="${esc(form.phoneOffTime || '')}">
       </div>`;
@@ -45,7 +47,7 @@ function phoneFieldHTML(form, settings) {
   const magnitude = Number.isFinite(form.phoneGapMinutes) ? Math.abs(form.phoneGapMinutes) : '';
 
   return `
-    <div class="field">
+    <div class="field" data-required="phone">
       <label class="field-label" for="f-phone-min" id="f-phone-label">${PHONE_LABELS[inBed ? 'inBed' : 'before']}</label>
       <div class="minutes-field">
         <input type="number" id="f-phone-min" inputmode="numeric"
@@ -117,7 +119,7 @@ export function checkinSheet(date, ctx) {
   const html = () => {
     const energy = energyLabel(form.energy);
     return `
-      <div class="field">
+      <div class="field" data-required="date">
         <label class="field-label" for="f-date">За какую ночь (дата пробуждения)</label>
         <input type="date" id="f-date" name="date" value="${esc(form.date)}" max="${todayISO()}">
       </div>
@@ -125,11 +127,11 @@ export function checkinSheet(date, ctx) {
       ${phoneFieldHTML(form, settings)}
 
       <div class="row">
-        <div class="field">
+        <div class="field" data-required="bedTime">
           <label class="field-label" for="f-bed">Во сколько лёг</label>
           <input type="time" id="f-bed" name="bedTime" value="${esc(form.bedTime)}" required>
         </div>
-        <div class="field">
+        <div class="field" data-required="wakeTime">
           <label class="field-label" for="f-wake">Во сколько проснулся</label>
           <input type="time" id="f-wake" name="wakeTime" value="${esc(form.wakeTime)}" required>
         </div>
@@ -137,19 +139,15 @@ export function checkinSheet(date, ctx) {
 
       <div id="live-slot">${liveHTML(form, settings)}</div>
 
-      <div class="field">
+      <div class="field" data-required="energy">
         <div class="energy-head">
-          <label class="field-label" for="f-energy" style="margin:0">Как себя чувствуешь</label>
+          <label class="field-label" style="margin:0">Как себя чувствуешь</label>
           <span class="energy-value" id="energy-text">${energy.icon} ${esc(energy.label)}</span>
         </div>
-        <input type="range" id="f-energy" name="energy" min="1" max="10" step="1"
-               list="energy-ticks" value="${form.energy}">
-        <datalist id="energy-ticks">
-          ${ENERGY_LEVELS.map((l) => `<option value="${l.value}"></option>`).join('')}
-        </datalist>
-        <div class="energy-scale">
-          ${ENERGY_LEVELS.map((l) => `<span class="${l.value === form.energy ? 'on' : ''}"
-             data-tick="${l.value}">${l.value}</span>`).join('')}
+        <div class="energy-pick" id="f-energy">
+          ${ENERGY_LEVELS.map((l) => `
+            <button type="button" class="energy-btn ${l.value === form.energy ? 'on' : ''}"
+                    data-energy="${l.value}" aria-label="${esc(l.label)}">${l.value}</button>`).join('')}
         </div>
       </div>
 
@@ -187,7 +185,15 @@ export function checkinSheet(date, ctx) {
 
   const mount = (root) => {
     const liveSlot = root.querySelector('#live-slot');
-    const refreshLive = () => { liveSlot.innerHTML = liveHTML(form, settings); };
+    const refreshLive = () => {
+      liveSlot.innerHTML = liveHTML(form, settings);
+      // Заполнил пропущенное — подсветка снимается сразу, не дожидаясь
+      // повторного нажатия «Сохранить»
+      const stillMissing = missingFields(form).map((m) => m.field);
+      root.querySelectorAll('[data-required].missing').forEach((el) => {
+        if (!stillMissing.includes(el.dataset.required)) el.classList.remove('missing');
+      });
+    };
 
     // Пока пользователь не правил времена руками, они остаются
     // подстановкой и должны следовать за выбранной датой.
@@ -211,15 +217,22 @@ export function checkinSheet(date, ctx) {
       });
     });
 
-    const energyInput = root.querySelector('#f-energy');
+    const energyPick = root.querySelector('#f-energy');
     const energyText = root.querySelector('#energy-text');
-    energyInput.addEventListener('input', () => {
-      form.energy = Number(energyInput.value);
+    energyPick.addEventListener('click', (event) => {
+      const button = event.target.closest('.energy-btn');
+      if (!button) return;
+
+      const value = Number(button.dataset.energy);
+      // Повторное нажатие снимает отметку обратно в «не отмечено»
+      form.energy = form.energy === value ? null : value;
+
       const label = energyLabel(form.energy);
-      energyText.textContent = `${label.icon} ${label.label}`;
-      root.querySelectorAll('[data-tick]').forEach((tick) => {
-        tick.classList.toggle('on', Number(tick.dataset.tick) === form.energy);
+      energyText.textContent = `${label.icon} ${label.label}`.trim();
+      energyPick.querySelectorAll('.energy-btn').forEach((b) => {
+        b.classList.toggle('on', Number(b.dataset.energy) === form.energy);
       });
+      refreshLive();
     });
 
     const minutesInput = root.querySelector('#f-phone-min');
@@ -264,15 +277,29 @@ export function checkinSheet(date, ctx) {
       form.note = e.target.value;
     });
 
+    const markMissing = (fields) => {
+      root.querySelectorAll('[data-required]').forEach((el) => {
+        el.classList.toggle('missing', fields.includes(el.dataset.required));
+      });
+    };
+
     root.querySelector('[data-role="save"]').addEventListener('click', () => {
-      const { errors } = validateEntry(form);
       const slot = root.querySelector('#save-msg');
-      if (errors.length) {
-        slot.innerHTML = `<div class="msg error">${errors.map(esc).join('<br>')}</div>`;
+
+      const missing = missingFields(form);
+      if (missing.length) {
+        markMissing(missing.map((m) => m.field));
+        slot.innerHTML = `<div class="msg error">Не заполнено: ${
+          esc(missing.map((m) => m.label).join(', '))}.</div>`;
+        const first = root.querySelector('[data-required].missing');
+        if (first) first.scrollIntoView({ block: 'center', behavior: 'smooth' });
         return;
       }
-      if (!form.date) {
-        slot.innerHTML = '<div class="msg error">Укажи дату.</div>';
+      markMissing([]);
+
+      const { errors } = validateEntry(form);
+      if (errors.length) {
+        slot.innerHTML = `<div class="msg error">${errors.map(esc).join('<br>')}</div>`;
         return;
       }
       // Дата могла измениться — старую запись за этот день не плодим,

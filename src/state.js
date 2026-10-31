@@ -64,6 +64,13 @@ function readPlanSnapshot(plan) {
   };
 }
 
+/** Число 1..10 или null. Пустые значения не должны схлопываться в 0 */
+function readLevel(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
 function migrateViolations(entry) {
   if (entry.violations && typeof entry.violations === 'object') {
     return {
@@ -197,20 +204,26 @@ export function normalize(raw) {
   for (const [date, entry] of Object.entries(raw.entries || {})) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
     if (!entry || !entry.bedTime || !entry.wakeTime) continue;
-    const gap = Number(entry.phoneGapMinutes);
+    const gap = readLevel(entry.phoneGapMinutes);
     entries[date] = {
       date,
       phoneOffTime: entry.phoneOffTime || null,
-      phoneGapMinutes: Number.isFinite(gap) ? gap : null,
+      phoneGapMinutes: gap,
       bedTime: entry.bedTime,
       wakeTime: entry.wakeTime,
-      energy: Number(entry.energy) || 5,
+      // Самочувствие может быть не отмечено. Проверять через Number()
+      // нельзя: Number(null) и Number('') дают 0, а не NaN, — пустое
+      // поле превращалось бы в настоящую единицу на шкале.
+      energy: readLevel(entry.energy),
       // У записей, сделанных до появления снимков, его нет. Замораживаем
       // по текущим настройкам: это и есть то расписание, при котором
       // их записывали, а без снимка они поедут при первой же правке режима.
       plan: readPlanSnapshot(entry.plan) || planSnapshot(date, settings),
       violations: migrateViolations(entry),
-      bonuses: { morningLight: Boolean(entry.bonuses && entry.bonuses.morningLight) },
+      bonuses: {
+        morningLight: Boolean(entry.bonuses && entry.bonuses.morningLight),
+        morningExercise: Boolean(entry.bonuses && entry.bonuses.morningExercise),
+      },
       note: entry.note || '',
       createdAt: entry.createdAt || new Date().toISOString(),
       updatedAt: entry.updatedAt || entry.createdAt || new Date().toISOString(),

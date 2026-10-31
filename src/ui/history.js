@@ -73,8 +73,12 @@ function calendarCard(state, cursor, mode) {
     if (day) {
       classes.push('filled');
       if (byEnergy) {
-        const color = energyColor(day.entry.energy);
-        tint = `background:${color.bg};border-color:${color.border};color:${color.text}`;
+        // Самочувствие не отмечено — клетка остаётся нейтральной,
+        // а не красится «серединкой», которой не было
+        if (Number.isFinite(day.entry.energy)) {
+          const color = energyColor(day.entry.energy);
+          tint = `background:${color.bg};border-color:${color.border};color:${color.text}`;
+        }
       } else {
         classes.push(day.grade);
       }
@@ -84,7 +88,8 @@ function calendarCard(state, cursor, mode) {
     const future = iso > today;
     const title = day
       ? `${formatDuration(day.sleepMinutes)} · ${day.entry.bedTime} → ${day.entry.wakeTime}`
-        + ` · ${day.totalPenalty} штрафных · самочувствие ${day.entry.energy}`
+        + ` · ${day.totalPenalty} штрафных`
+        + (Number.isFinite(day.entry.energy) ? ` · самочувствие ${day.entry.energy}` : '')
       : (future ? 'Ещё не наступило' : 'Нет записи');
 
     cells.push(

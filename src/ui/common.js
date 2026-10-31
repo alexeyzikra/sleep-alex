@@ -6,6 +6,9 @@ export function esc(value) {
 }
 
 /** Своя реакция на каждое из десяти делений, а не одна на пару */
+/** Самочувствие не отмечено — отдельное состояние, а не «серединка» */
+export const ENERGY_UNSET = { icon: '', label: 'не отмечено' };
+
 export const ENERGY_LEVELS = [
   { value: 1, icon: '💀', label: 'Разбитый' },
   { value: 2, icon: '😵', label: 'Очень тяжело' },
@@ -20,6 +23,7 @@ export const ENERGY_LEVELS = [
 ];
 
 export function energyLabel(value) {
+  if (!Number.isFinite(value)) return ENERGY_UNSET;
   return ENERGY_LEVELS[Math.min(10, Math.max(1, Math.round(value))) - 1];
 }
 
@@ -31,6 +35,7 @@ export function energyLabel(value) {
 /** Положительные действия: гасят набранные очки, а не добавляют свои */
 export const BONUS_ITEMS = [
   { key: 'morningLight', label: 'Утром сразу вышел на свет' },
+  { key: 'morningExercise', label: 'Сделал зарядку утром' },
 ];
 
 export const VIOLATION_ITEMS = [
