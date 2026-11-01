@@ -276,8 +276,17 @@ export function saveEntry(entry) {
   // существующей ночи его не трогает: расписание той ночи уже случилось.
   const plan = (existing && existing.plan) || planSnapshot(entry.date, data.settings);
 
+  // Телефон хранится ровно тем способом, который выбран в настройках.
+  // Форма показывает одно поле из двух, а модель читает phoneGapMinutes
+  // вперёд часов — поэтому чужое поле, пережившее сохранение, либо молча
+  // отменяет видимый ответ, либо годами противоречит ему в файле.
+  const phone = data.settings.phoneInput === 'clock'
+    ? { phoneOffTime: entry.phoneOffTime || null, phoneGapMinutes: null }
+    : { phoneOffTime: null, phoneGapMinutes: readLevel(entry.phoneGapMinutes) };
+
   data.entries[entry.date] = {
     ...entry,
+    ...phone,
     plan,
     createdAt: existing ? existing.createdAt : now,
     updatedAt: now,
