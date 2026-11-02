@@ -6,8 +6,10 @@ import {
   validateEntry, scoreEntry, formatDuration, formatDateHuman, todayISO, GRADE_LABELS,
   plannedFor, missingFields,
 } from '../model.js';
-import { getData, saveEntry, deleteEntry } from '../state.js';
-import { esc, energyLabel, ENERGY_LEVELS, VIOLATION_ITEMS, BONUS_ITEMS } from './common.js';
+import { getData, saveEntry, deleteEntry, storageError } from '../state.js';
+import {
+  esc, energyLabel, storageMessage, ENERGY_LEVELS, VIOLATION_ITEMS, BONUS_ITEMS,
+} from './common.js';
 
 function blankForm(date, settings) {
   // Времена берутся из плана именно на этот день, а не из базовых
@@ -305,7 +307,15 @@ export function checkinSheet(date, ctx) {
       // Дата могла измениться — старую запись за этот день не плодим,
       // а переносим: удаляем прежний ключ, если он отличается.
       if (existing && existing.date !== form.date) deleteEntry(existing.date);
-      saveEntry(form);
+
+      // Форма закрывается только после удачной записи. Иначе человек увидел бы
+      // бодрый тост «Записано», а ночи назавтра не оказалось бы: в памяти она
+      // есть, на диске нет.
+      if (!saveEntry(form)) {
+        slot.innerHTML = `<div class="msg error">${esc(storageMessage(storageError))}</div>`;
+        slot.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        return;
+      }
       ctx.close();
       const score = scoreEntry(form, settings);
       ctx.toast(score.totalPenalty === 0

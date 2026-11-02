@@ -8,6 +8,7 @@ import { renderHistory } from './ui/history.js';
 import { renderSettings, refreshSettingsComputed } from './ui/settings.js';
 import { renderStats } from './ui/stats.js';
 import { checkinSheet } from './ui/checkin.js';
+import { esc, storageMessage } from './ui/common.js';
 
 const TABS = [
   { id: 'home', icon: '🌙', label: 'Главное' },
@@ -21,6 +22,7 @@ const ui = { tab: 'home', month: null, metric: 'duration', period: 'month', cale
 const app = document.getElementById('app');
 const tabbar = document.getElementById('tabbar');
 const todayLabel = document.getElementById('today-label');
+const warningSlot = document.getElementById('storage-warning');
 
 /**
  * Пока пользователь правит настройки, полный перерендер убивал бы
@@ -39,13 +41,15 @@ function render() {
     period: ui.period,
     calendarMode: ui.calendarMode,
     backupDue: store.backupReminderDue(),
-    storageBlocked: !store.storageAvailable,
   };
 
-  if (ui.tab === 'history') app.innerHTML = renderHistory(state, flags);
-  else if (ui.tab === 'stats') app.innerHTML = renderStats(state, flags);
-  else if (ui.tab === 'settings') app.innerHTML = renderSettings(state, flags);
-  else app.innerHTML = renderDashboard(state, flags);
+  let page;
+  if (ui.tab === 'history') page = renderHistory(state, flags);
+  else if (ui.tab === 'stats') page = renderStats(state, flags);
+  else if (ui.tab === 'settings') page = renderSettings(state, flags);
+  else page = renderDashboard(state, flags);
+
+  app.innerHTML = page;
 
   tabbar.innerHTML = TABS.map((tab) => `
     <button class="tab ${tab.id === ui.tab ? 'active' : ''}" data-tab="${tab.id}">
@@ -57,7 +61,23 @@ function render() {
 
 }
 
-store.subscribe(render);
+/**
+ * Предупреждение живёт вне #app и обновляется отдельно от вкладок:
+ * не ушедшие на диск данные — единственная поломка, о которой надо знать
+ * на любом экране, в том числе пока правка настроек держит перерендер.
+ */
+function renderStorageWarning() {
+  const kind = store.storageError;
+  warningSlot.hidden = !kind;
+  warningSlot.innerHTML = kind
+    ? `<div class="msg error">${esc(storageMessage(kind))}</div>`
+    : '';
+}
+
+store.subscribe(() => {
+  renderStorageWarning();
+  render();
+});
 
 // ---------- Модальное окно ----------
 
@@ -296,6 +316,7 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
+renderStorageWarning();
 render();
 
 // ---------- Service Worker ----------

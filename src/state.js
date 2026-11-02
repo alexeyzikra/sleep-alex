@@ -161,8 +161,21 @@ function emptyData() {
   };
 }
 
-/** Доступен ли localStorage вообще (приватный режим, запрет данных сайта) */
-export let storageAvailable = true;
+/**
+ * Почему последняя попытка записи не удалась: null | 'quota' | 'blocked'.
+ * Различать важно: переполнение лечится экспортом и чисткой, запрет —
+ * настройками браузера, и советовать одно вместо другого бесполезно.
+ */
+export let storageError = null;
+
+/** Браузеры сообщают о переполнении по-разному, у старых есть только code */
+function isQuotaError(err) {
+  if (!err) return false;
+  return err.name === 'QuotaExceededError'
+    || err.name === 'NS_ERROR_DOM_QUOTA_REACHED'
+    || err.code === 22
+    || err.code === 1014;
+}
 
 function readRaw() {
   try {
@@ -177,7 +190,7 @@ function readRaw() {
     }
     return null;
   } catch {
-    storageAvailable = false;
+    storageError = 'blocked';
     return null;
   }
 }
@@ -185,10 +198,10 @@ function readRaw() {
 function writeRaw(value) {
   try {
     localStorage.setItem(STORAGE_KEY, value);
-    storageAvailable = true;
+    storageError = null;
     return true;
-  } catch {
-    storageAvailable = false;
+  } catch (err) {
+    storageError = isQuotaError(err) ? 'quota' : 'blocked';
     return false;
   }
 }
@@ -261,9 +274,15 @@ export function subscribe(fn) {
   return () => listeners.delete(fn);
 }
 
+/**
+ * Возвращает, легли ли данные на диск. Не проверить это нельзя: в памяти
+ * запись уже есть, интерфейс покажет её как ни в чём не бывало, и о потере
+ * станет известно только после перезагрузки.
+ */
 function commit() {
-  writeRaw(JSON.stringify(data));
+  const saved = writeRaw(JSON.stringify(data));
   for (const fn of listeners) fn(data);
+  return saved;
 }
 
 // ---------- Операции ----------
@@ -291,12 +310,12 @@ export function saveEntry(entry) {
     createdAt: existing ? existing.createdAt : now,
     updatedAt: now,
   };
-  commit();
+  return commit();
 }
 
 export function deleteEntry(date) {
   delete data.entries[date];
-  commit();
+  return commit();
 }
 
 export function updateSettings(patch) {

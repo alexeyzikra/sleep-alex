@@ -7,7 +7,7 @@
  */
 
 import { esc } from './common.js';
-import { storageAvailable, getData } from '../state.js';
+import { getData } from '../state.js';
 import {
   weeklyPlan, plannedFor, anchorWake, formatDuration, fromMinutes,
   isoWeek, weekParity, todayISO, PENALTY,
@@ -203,9 +203,6 @@ export function renderSettings(state) {
 
       <section class="card">
         <h2 class="card-title">Опасная зона</h2>
-        ${!storageAvailable ? `<div class="msg error">
-          Браузер запрещает сохранение — данные не переживут перезагрузку.
-        </div>` : ''}
         <button class="btn btn-danger" data-action="wipe">Удалить все данные</button>
       </section>
     </div>`;

@@ -221,11 +221,6 @@ export function renderDashboard(state, flags) {
         <button class="btn-ghost" data-action="export" style="text-decoration:underline;padding:0;color:inherit;font:inherit">скачай JSON</button>.
       </div>` : ''}
 
-      ${flags.storageBlocked ? `<div class="msg error">
-        Браузер запретил сохранение данных — записи исчезнут при перезагрузке.
-        Выйди из приватного режима или разреши данные сайта.
-      </div>` : ''}
-
       <button class="btn btn-primary" data-action="checkin">
         ${hasToday ? '✏️ Изменить сегодняшний сон' : '🌙 Записать сегодняшний сон'}
       </button>
