@@ -111,6 +111,20 @@ export function weekdayIndexMonday(iso) {
   return (parseISO(iso).getDay() + 6) % 7;
 }
 
+/**
+ * Час, до которого «эта ночь» — та, что идёт прямо сейчас.
+ *
+ * Запись привязана к дате пробуждения, но планы смотрят не утром, а
+ * вечером: «во сколько мне сегодня лечь». В час ночи ночь та же самая,
+ * хотя дата уже сменилась, поэтому граница стоит не на полуночи.
+ */
+export const NIGHT_CUTOFF_HOUR = 5;
+
+/** Дата пробуждения той ночи, про которую сейчас имеет смысл говорить «эта» */
+export function currentNightDate(today, now = new Date()) {
+  return now.getHours() < NIGHT_CUTOFF_HOUR ? today : addDays(today, 1);
+}
+
 // ---------- Чётность недели ----------
 
 /**

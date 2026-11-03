@@ -1,5 +1,5 @@
 import {
-  formatDuration, formatSigned, plannedFor,
+  formatDuration, formatSigned, plannedFor, currentNightDate,
   GRADE_LABELS, GRADE_LIMITS, FORM_WINDOW,
 } from '../model.js';
 import { esc } from './common.js';
@@ -168,21 +168,27 @@ function lastNightCard(state) {
 
 // Только то, что относится к сегодняшней ночи. Статистика живёт
 // в «Истории» — здесь ей не место, это карточка плана, а не сводка.
+//
+// Ночь берётся предстоящая, а не та, чья дата стоит в календаре:
+// в карточку заглядывают вечером, чтобы узнать, во сколько ложиться
+// и во сколько вставать утром. До пяти утра это всё ещё текущая ночь.
 function targetCard(state) {
-  const plan = plannedFor(state.today, state.settings);
+  const date = currentNightDate(state.today);
+  const plan = plannedFor(date, state.settings);
+  const wakeDay = date === state.today ? 'сегодня' : 'завтра';
 
   return `
     <section class="card">
-      <h2 class="card-title">План на сегодня</h2>
+      <h2 class="card-title">План на эту ночь</h2>
       <div class="statlist">
         <div class="stat">
           <span class="stat-label">Отбой</span>
           <span class="stat-value">${esc(plan.bedTime)}</span>
         </div>
         <div class="stat">
-          <span class="stat-label">Подъём${plan.alternates
-            ? ` <span class="small muted">(${plan.parity === 'even' ? 'чётная' : 'нечётная'} неделя)</span>`
-            : (plan.isWeekly ? ' <span class="small muted">(по дню недели)</span>' : '')}</span>
+          <span class="stat-label">Подъём <span class="small muted">${wakeDay}${plan.alternates
+            ? `, ${plan.parity === 'even' ? 'чётная' : 'нечётная'} неделя`
+            : (plan.isWeekly ? ', по дню недели' : '')}</span></span>
           <span class="stat-value">${esc(plan.wakeTime)}</span>
         </div>
         <div class="stat">
