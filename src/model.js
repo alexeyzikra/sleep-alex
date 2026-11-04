@@ -381,7 +381,9 @@ export const STREAK_CLEAN_LIMIT = 100;
 export const BLACK_RULES = {
   minSleepMinutes: 240,     // меньше 4 часов сна
   maxWakeDeviation: 180,    // встал на 3+ часа мимо плана
+  maxBedLate: 180,          // лёг на 3+ часа позже плана
   maxMidpointShift: 180,    // середина сна уехала на 3+ часа от привычной
+  maxPenalty: 800,          // срыв по совокупности, даже если порознь всё «почти»
 };
 
 export const GRADE_LABELS = {
@@ -561,7 +563,9 @@ export function scoreEntry(entry, settings, context = {}) {
   // Ниже нуля не уходим: идеальная ночь не должна копить запас на будущее
   const totalPenalty = Math.max(0, rawPenalty - bonusTotal);
 
-  // Чёрный уровень — отдельные правила, а не сумма очков
+  // Чёрный уровень — отдельные правила поверх шкалы очков.
+  // Четыре из них ловят одну катастрофу, пятое — сумму: срыв чаще всего
+  // не одна дикость, а когда разом плохо всё, и каждое «почти не дотянуло».
   const blackFlags = [];
   if (r.sleepMinutes < BLACK_RULES.minSleepMinutes) {
     blackFlags.push(`Меньше ${BLACK_RULES.minSleepMinutes / 60} часов сна`);
@@ -569,12 +573,21 @@ export function scoreEntry(entry, settings, context = {}) {
   if (wakeDeviation > BLACK_RULES.maxWakeDeviation) {
     blackFlags.push(`Подъём мимо плана больше чем на ${BLACK_RULES.maxWakeDeviation / 60} часа`);
   }
+  if (bedLate && bedDeviation > BLACK_RULES.maxBedLate) {
+    blackFlags.push(`Отбой позже плана больше чем на ${BLACK_RULES.maxBedLate / 60} часа`);
+  }
+  // Привычная середина считается по ФАКТИЧЕСКИМ прошлым ночам, а не по плану:
+  // при уже съехавшем режиме это правило срабатывает слабо, поэтому держать
+  // его за страховку нельзя — для этого и есть порог по сумме.
   const baseline = context.midpointBaseline;
   if (baseline !== null && baseline !== undefined) {
     const shift = Math.abs(r.midpointAbs - baseline);
     if (shift > BLACK_RULES.maxMidpointShift) {
       blackFlags.push(`Середина сна уехала на ${formatDuration(shift)} от привычной`);
     }
+  }
+  if (totalPenalty > BLACK_RULES.maxPenalty) {
+    blackFlags.push(`Больше ${BLACK_RULES.maxPenalty} очков за ночь`);
   }
 
   let grade;
