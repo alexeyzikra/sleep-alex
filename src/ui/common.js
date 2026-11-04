@@ -13,7 +13,7 @@ export const ENERGY_LEVELS = [
   { value: 1, icon: '💀', label: 'Убитый' },
   { value: 2, icon: '😵', label: 'Очень тяжко' },
   { value: 3, icon: '😩', label: 'С трудом встал' },
-  { value: 4, icon: '🫩', label: 'Встал, но овощь' },
+  { value: 4, icon: '🫩', label: 'Встал, но плохо' },
   { value: 5, icon: '😕', label: 'Так себе' },
   { value: 6, icon: '🙃', label: 'Нормик' },
   { value: 7, icon: '😀', label: 'Неплохо' },
