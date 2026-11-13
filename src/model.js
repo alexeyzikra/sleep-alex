@@ -734,27 +734,45 @@ export function computeForm(days) {
  * Пропущенные дни стрик не рвут и не продлевают: идём по заполненным
  * ночам и просто пропускаем дырки.
  */
+/**
+ * Контекст ночи: с чем её сравнивать, кроме плана.
+ *
+ * Живёт отдельной функцией, потому что считать его должен не только
+ * дашборд: окно чек-ина оценивает ту же ночь и обязано получить тот же
+ * ответ. Пока расчёт был заперт внутри computeState, предпросмотр
+ * показывал заниженные очки — без удвоения за долг сна.
+ *
+ * Берутся только ночи СТРОГО РАНЬШЕ этой: ночь не должна влиять
+ * на собственный штраф, а правка старой записи — на то, с чем её
+ * сравнивали тогда.
+ */
+export function nightContext(days, dateISO) {
+  const before = days.filter((d) => d.entry.date < dateISO);
+
+  const midpoints = before.map((d) => d.midpointAbs);
+  const midpointBaseline = midpoints.length >= BASELINE_MIN_NIGHTS
+    ? median(midpoints.slice(-14))
+    : null;
+
+  const from = addDays(dateISO, -BALANCE_RELIEF.windowDays);
+  const balanceBefore = before
+    .filter((d) => d.entry.date >= from)
+    .reduce((sum, d) => sum + d.sleepDeviation, 0);
+
+  return { midpointBaseline, balanceBefore };
+}
+
 export function computeState(data, today = todayISO()) {
   const settings = data.settings;
   const sorted = Object.values(data.entries).sort((a, b) => (a.date < b.date ? -1 : 1));
 
-  // Привычная середина сна считается по ПРЕДЫДУЩИМ ночам, иначе дикая
-  // ночь сама себя сделала бы нормой и чёрный флаг не сработал бы.
+  // Привычная середина сна и долг сна считаются по ПРЕДЫДУЩИМ ночам,
+  // иначе дикая ночь сама себя сделала бы нормой и чёрный флаг
+  // не сработал бы. Ночи идут по возрастанию даты, поэтому к моменту
+  // оценки очередной в days лежат ровно те, что ей предшествуют.
   const days = [];
-  const midpointHistory = [];
   for (const entry of sorted) {
-    const baseline = midpointHistory.length >= BASELINE_MIN_NIGHTS
-      ? median(midpointHistory.slice(-14))
-      : null;
-    // Баланс по уже оценённым предыдущим ночам того же окна,
-    // что показано на дашборде, но без текущей ночи
-    const from = addDays(entry.date, -BALANCE_RELIEF.windowDays);
-    const balanceBefore = days
-      .filter((d) => d.entry.date >= from && d.entry.date < entry.date)
-      .reduce((sum, d) => sum + d.sleepDeviation, 0);
-
-    days.push(scoreEntry(entry, settings, { midpointBaseline: baseline, balanceBefore }));
-    midpointHistory.push(days[days.length - 1].midpointAbs);
+    days.push(scoreEntry(entry, settings, nightContext(days, entry.date)));
   }
 
   const countFromEnd = (predicate) => {

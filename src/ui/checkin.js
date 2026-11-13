@@ -4,6 +4,7 @@
 
 import {
   validateEntry, scoreEntry, formatDuration, formatDateHuman, todayISO, GRADE_LABELS,
+  computeState, nightContext,
   plannedFor, missingFields,
 } from '../model.js';
 import { getData, saveEntry, deleteEntry, storageError } from '../state.js';
@@ -68,14 +69,17 @@ const PHONE_LABELS = {
   inBed: 'Сколько минут листал телефон в кровати',
 };
 
-function liveHTML(form, settings) {
+function liveHTML(form, settings, history) {
   const { errors, warnings, resolved } = validateEntry(form);
 
   if (errors.length) {
     return `<div class="msg error">${errors.map(esc).join('<br>')}</div>`;
   }
 
-  const score = scoreEntry(form, settings);
+  // Контекст тот же, что на дашборде, иначе предпросмотр покажет одно
+  // число, а сохранённая ночь получит другое. По дате из формы, а не
+  // из открытия: дату можно поменять прямо здесь.
+  const score = scoreEntry(form, settings, nightContext(history, form.date));
   const bits = [];
   if (resolved.phoneFreeMinutes !== null && resolved.phoneFreeMinutes > 0) {
     bits.push(`без телефона ${formatDuration(resolved.phoneFreeMinutes)} до сна`);
@@ -113,6 +117,8 @@ function liveHTML(form, settings) {
 export function checkinSheet(date, ctx) {
   const data = getData();
   const settings = data.settings;
+  // Пока окно открыто, прошлые ночи не меняются — считаем их один раз
+  const history = computeState(data).days;
   const existing = data.entries[date];
   const form = existing
     ? JSON.parse(JSON.stringify(existing))
@@ -139,7 +145,7 @@ export function checkinSheet(date, ctx) {
         </div>
       </div>
 
-      <div id="live-slot">${liveHTML(form, settings)}</div>
+      <div id="live-slot">${liveHTML(form, settings, history)}</div>
 
       <div class="field" data-required="energy">
         <div class="energy-head">
@@ -188,7 +194,7 @@ export function checkinSheet(date, ctx) {
   const mount = (root) => {
     const liveSlot = root.querySelector('#live-slot');
     const refreshLive = () => {
-      liveSlot.innerHTML = liveHTML(form, settings);
+      liveSlot.innerHTML = liveHTML(form, settings, history);
       // Заполнил пропущенное — подсветка снимается сразу, не дожидаясь
       // повторного нажатия «Сохранить»
       const stillMissing = missingFields(form).map((m) => m.field);
@@ -317,7 +323,7 @@ export function checkinSheet(date, ctx) {
         return;
       }
       ctx.close();
-      const score = scoreEntry(form, settings);
+      const score = scoreEntry(form, settings, nightContext(history, form.date));
       ctx.toast(score.totalPenalty === 0
         ? `Записано: ${formatDuration(score.sleepMinutes)} · идеальная ночь`
         : `Записано: ${formatDuration(score.sleepMinutes)} · ${score.totalPenalty} штрафных`);
