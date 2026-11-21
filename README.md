@@ -386,3 +386,7 @@ src/ui/chart.js   ломаная на SVG: разрывы, пунктир пла
 scripts/          генератор иконок (рисует PNG без внешних зависимостей)
 public/sw.js      service worker, офлайн-режим
 ```
+
+## Лицензия
+
+[MIT](LICENSE)
